@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Flow - Roadmap Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fa-solid fa-users-gear"></i> Staff Filters</h2>
+            <button class="btn btn-toggle" onclick="toggleSidebar()" title="Close Sidebar">✕</button>
+        </div>
+        <div class="sidebar-content">
+            <h3>Team Directory</h3>
+            <div id="filter-list"></div>
+        </div>
+    </aside>
+
+    <main id="main-wrapper">
+        <nav class="top-nav">
+            <div class="nav-brand">
+                <button class="btn btn-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+                <div class="title-group">
+                    <h1>Gantt Flow</h1>
+                    <span class="subtitle">a tool for mapping tasks and milestones</span>
+                </div>
+            </div>
+            <div class="action-group">
+                <div id="save-status">Checking storage...</div>
+                <button class="btn btn-success" onclick="addProject()"><i class="fa-solid fa-folder-plus"></i> Project</button>
+                <button class="btn btn-accent" onclick="triggerImport()"><i class="fa-solid fa-file-import"></i> Import</button>
+                <button class="btn btn-primary" onclick="exportData()"><i class="fa-solid fa-file-export"></i> Export JSON</button>
+                <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleFileImport(event)">
+            </div>
+        </nav>
+
+        <div class="timeline-container">
+            <div class="timeline-card">
+                <div class="timeline" id="timeline"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="editorModal" class="modal-overlay">
+        <div class="modal-content">
+            <div id="modalHeader" class="modal-header">
+                <h2 id="modalTitle">Edit Item</h2>
+                <p id="modalSubtitle">Update configuration details</p>
+            </div>
+            <div id="modalBody"></div>
+            <div class="modal-footer"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
