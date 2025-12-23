@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gantt Flow - Roadmap Manager</title>
+    <title>Gantt Flow</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,10 @@
             <button class="btn btn-toggle" onclick="toggleSidebar()" title="Close Sidebar">✕</button>
         </div>
         <div class="sidebar-content">
-            <h3>Team Directory</h3>
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 20px;" onclick="manageStaff()">
+                <i class="fa-solid fa-user-group"></i> Manage Team
+            </button>
+            <h3>Filter by Assignment</h3>
             <div id="filter-list"></div>
         </div>
     </aside>
@@ -29,7 +32,7 @@
                 <button class="btn btn-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
                 <div class="title-group">
                     <h1>Gantt Flow</h1>
-                    <span class="subtitle">a tool for mapping tasks and milestones</span>
+                    <span class="subtitle">mapping tasks and milestones</span>
                 </div>
             </div>
             <div class="action-group">
@@ -42,8 +45,8 @@
         </nav>
 
         <div class="timeline-container">
-            <div class="timeline-card">
-                <div class="timeline" id="timeline"></div>
+            <div class="timeline-card" id="timeline">
+                <!-- Data Area injected by app.js -->
             </div>
         </div>
     </main>

@@ -1,0 +1,15 @@
+{
+  "config": {
+    "startYear": 2026,
+    "startMonth": 1,
+    "endYear": 2026,
+    "endMonth": 12
+  },
+  "staff": {
+    "TBC": {
+      "name": "Unassigned",
+      "role": "TBC"
+    }
+  },
+  "projects": []
+}
