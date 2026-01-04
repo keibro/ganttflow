@@ -306,26 +306,54 @@ function render() {
         items.forEach((item, laneIdx) => {
             const vTop = 20 + (laneIdx * 50); 
             if (item.type === 'task') {
-                const leadData = staffInfo[item.lead] || { name: 'Unassigned', color: '#64748b', displayInitials: '?' };
-                const collabList = (item.support || []).map(s => staffInfo[s.staff]?.name || 'Unknown').join(', ');
-                const tooltipText = `Task: ${item.name}\nLead: ${leadData.name}\nTiming: ${getMonthPreview(item.start)} to ${getMonthPreview(item.end)}\nCollaborators: ${collabList || 'None'}`;
+    const leadData = staffInfo[item.lead] || { name: 'Unassigned', color: '#64748b', displayInitials: '?' };
+    const supportCount = (item.support || []).length;
+    
+    // Width Calculations
+    const barWidthPx = (((item.end - item.start) / totalCols) * gridWidth);
+    
+    // Stacking width: Lead (28px) + each support adds ~12px due to -10px overlap
+    const totalBadgeWidth = 28 + (supportCount * 12);
+    const textWidth = item.name.length * 8;
+    
+    // Logic for placement
+    const badgesOutside = barWidthPx < (totalBadgeWidth + 10);
+    const labelOutside = barWidthPx < (totalBadgeWidth + textWidth + 30);
 
-                const barWidthPx = (((item.end - item.start) / totalCols) * gridWidth);
-                const badgeWidth = 33 + ((item.support || []).length * 27);
-                const textWidth = item.name.length * 8.5;
-                const totalRequiredInside = badgeWidth + textWidth + 24;
-                
-                const labelOutside = totalRequiredInside > barWidthPx;
+    const tooltipText = `Task: ${item.name}\nLead: ${leadData.name}\nTiming: ${getMonthPreview(item.start)} to ${getMonthPreview(item.end)}`;
 
-                const el = document.createElement('div');
-                el.className = 'task-item';
-                el.style.left = `${((item.start-1)/totalCols)*100}%`;
-                el.style.width = `${((item.end-item.start)/totalCols)*100}%`;
-                el.style.top = `${vTop}px`;
-                el.onclick = () => editTask(pIdx, item.oIdx);
-                const tbcClass = (item.lead === 'TBC') ? 'tbc-warning' : '';
-                el.innerHTML = `<div class="task-bar ${tbcClass}" style="background:${leadData.color}" title="${tooltipText}"><div class="badge-group"><div class="badge lead" title="Lead: ${leadData.name}">${leadData.displayInitials}</div>${(item.support||[]).map(s => `<div class="badge support" title="Collaborator: ${staffInfo[s.staff]?.name || '?'}" style="background:${staffInfo[s.staff]?.color || '#64748b'}">${staffInfo[s.staff]?.displayInitials || '?'}</div>`).join('')}</div><span class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}">${(item.lead === 'TBC') ? '<i class="fa-solid fa-triangle-exclamation" style="margin-right:8px"></i>' : ''}${item.name}</span></div>`;
-                area.appendChild(el);
+    const el = document.createElement('div');
+    el.className = 'task-item';
+    el.style.left = `${((item.start-1)/totalCols)*100}%`;
+    el.style.width = `${((item.end-item.start)/totalCols)*100}%`;
+    el.style.top = `${vTop}px`;
+    el.onclick = () => editTask(pIdx, item.oIdx);
+
+    const tbcClass = (item.lead === 'TBC') ? 'tbc-warning' : '';
+    
+    // Construct Badges HTML
+    const badgesHtml = `
+        <div class="badge-group ${badgesOutside ? 'badges-outside' : ''}">
+            <div class="badge lead" title="Lead: ${leadData.name}">${leadData.displayInitials}</div>
+            ${(item.support||[]).map(s => `
+                <div class="badge support" 
+                     title="Collaborator: ${staffInfo[s.staff]?.name || '?'}" 
+                     style="background:${staffInfo[s.staff]?.color || '#64748b'}">
+                     ${staffInfo[s.staff]?.displayInitials || '?'}
+                </div>`).join('')}
+        </div>`;
+
+    el.innerHTML = `
+        <div class="task-bar ${tbcClass}" style="background:${leadData.color}" title="${tooltipText}">
+            ${badgesHtml}
+            <span class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}">
+                ${(item.lead === 'TBC') ? '<i class="fa-solid fa-triangle-exclamation" style="margin-right:8px"></i>' : ''}
+                ${item.name}
+            </span>
+        </div>`;
+    
+    area.appendChild(el);
+
             } else {
                 const iconMap = {'workshop':'fa-users','document':'fa-file-lines','deployment':'fa-rocket','meeting':'fa-handshake','tech':'fa-microchip','report':'fa-chart-pie'};
                 const mEl = document.createElement('div');
