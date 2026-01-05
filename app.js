@@ -1,5 +1,5 @@
 /**
- * Gantt Flow - Multi-line Label Manager (No Shortening)
+ * Gantt Flow - Multi-line Label Manager (Surname Sorted)
  */
 
 let staffInfo = {};
@@ -11,6 +11,23 @@ let editingContext = null;
 
 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PROFESSIONAL_PALETTE = ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f","#90be6d","#43aa8b","#4d908e","#577590","#277da1"];
+
+// --- Sorting Helper ---
+
+/**
+ * Returns staff list (excluding TBC) sorted alphabetically by surname.
+ */
+function getStaffSortedBySurname() {
+    return Object.entries(staffInfo)
+        .filter(([id]) => id !== 'TBC')
+        .sort((a, b) => {
+            const nameA = a[1].name.trim().split(/\s+/);
+            const nameB = b[1].name.trim().split(/\s+/);
+            const surnameA = nameA[nameA.length - 1].toLowerCase();
+            const surnameB = nameB[nameB.length - 1].toLowerCase();
+            return surnameA.localeCompare(surnameB);
+        });
+}
 
 // --- Initialization ---
 
@@ -42,9 +59,9 @@ function sortProjects() {
 }
 
 function updateInitials() {
-    const sortedKeys = Object.keys(staffInfo).filter(k => k !== 'TBC').sort((a,b) => staffInfo[a].name.localeCompare(staffInfo[b].name));
-    sortedKeys.forEach(id => {
-        const nameParts = staffInfo[id].name.trim().split(/\s+/);
+    const sortedBySurname = getStaffSortedBySurname();
+    sortedBySurname.forEach(([id, data]) => {
+        const nameParts = data.name.trim().split(/\s+/);
         let base = (nameParts.length > 1) ? (nameParts[0][0] + nameParts[nameParts.length-1][0]) : nameParts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
     });
@@ -52,8 +69,10 @@ function updateInitials() {
 }
 
 function assignColors() {
-    const sortedKeys = Object.keys(staffInfo).filter(k => k !== 'TBC').sort((a,b) => staffInfo[a].name.localeCompare(staffInfo[b].name));
-    sortedKeys.forEach((key, index) => { staffInfo[key].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; });
+    const sortedBySurname = getStaffSortedBySurname();
+    sortedBySurname.forEach(([id], index) => { 
+        staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
+    });
     if (!staffInfo['TBC']) staffInfo['TBC'] = { name: 'Unassigned', color: '#64748b' };
     updateInitials();
 }
@@ -100,7 +119,9 @@ function toggleSidebar() { document.getElementById('sidebar').classList.toggle('
 function initFilters() {
     const container = document.getElementById('filter-list');
     container.innerHTML = `<button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')">All Projects</button>`;
-    Object.entries(staffInfo).filter(([k]) => k !== 'TBC').sort((a,b) => a[1].name.localeCompare(b[1].name)).forEach(([key, info]) => {
+    
+    // Updated to sort by Surname
+    getStaffSortedBySurname().forEach(([key, info]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-item'; btn.id = `f-${key}`;
         btn.innerHTML = `<div style="display:flex; align-items:center; gap:10px;"><div class="filter-color-dot" style="background:${info.color}"></div>${info.name}</div>`;
@@ -155,8 +176,29 @@ function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone'
 function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
     const t = projects[pIdx].tasks[tIdx];
-    const collaboratorList = Object.entries(staffInfo).filter(([k]) => k !== 'TBC').map(([k, v]) => `<label class="collaborator-item"><input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''}><span>${v.name}</span></label>`).join('');
-    openModal("Edit Task", "Details", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div><div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div><div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div><div class="form-group full-width"><label>Lead</label><select id="e_lead">${Object.entries(staffInfo).map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="form-group full-width"><label>Collaborators</label><div class="collaborator-box">${collaboratorList}</div></div></div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
+    
+    // Updated to sort by Surname
+    const sortedStaff = getStaffSortedBySurname();
+    
+    const collaboratorList = sortedStaff.map(([k, v]) => `
+        <label class="collaborator-item">
+            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''}>
+            <span>${v.name}</span>
+        </label>`).join('');
+
+    const leadOptions = [
+        ['TBC', staffInfo['TBC']],
+        ...sortedStaff
+    ].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
+
+    openModal("Edit Task", "Details", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
+            <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
+            <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
+            <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
+            <div class="form-group full-width"><label>Collaborators</label><div class="collaborator-box">${collaboratorList}</div></div>
+        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
     setupLivePreviews();
 }
 
@@ -188,7 +230,8 @@ function saveChanges() {
 
 function manageStaff() {
     let html = `<div class="staff-manager-list">`;
-    Object.entries(staffInfo).filter(([k])=>k!=='TBC').forEach(([id, info]) => {
+    // Updated to sort by Surname
+    getStaffSortedBySurname().forEach(([id, info]) => {
         html += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee"><span>${info.name}</span><button class="btn btn-sm" onclick="deleteStaff('${id}')">Delete</button></div>`;
     });
     html += `</div><div class="form-group" style="margin-top:15px"><label>New Member</label><input type="text" id="new_staff_name"></div>`;
@@ -248,7 +291,6 @@ function render() {
                 const supportNames = (item.support || []).map(s => staffInfo[s.staff]?.name.split(' ')[0] || '?');
                 const teamString = `${leadData.name.split(' ')[0]}${supportNames.length > 0 ? ' + ' + supportNames.join(', ') : ''}`;
 
-                // Width Logic for dynamic label position
                 const barWidthPx = (((item.end - item.start) / totalCols) * gridWidth);
                 const badgeWidth = 28 + (supportNames.length * 24) + 20; 
                 const longestLineChars = Math.max(item.name.length, teamString.length);
