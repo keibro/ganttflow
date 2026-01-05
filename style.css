@@ -68,7 +68,6 @@ body {
 
 /* Task Bars & Labels */
 .task-item { position: absolute; height: 48px; display: flex; align-items: center; z-index: 10; cursor: pointer; }
-
 .task-bar { 
     height: 100%; width: 100%; border-radius: 8px; 
     display: flex; align-items: center; padding: 0 10px; 
@@ -77,11 +76,7 @@ body {
 }
 .task-bar.tbc-warning { border: 2px dashed #ef4444 !important; animation: tbc-pulse 2s infinite; }
 
-.task-label { 
-    display: flex; flex-direction: column; justify-content: center;
-    line-height: 1.25; pointer-events: none;
-}
-/* Removed overflow:hidden and ellipsis to ensure names are never shortened */
+.task-label { display: flex; flex-direction: column; justify-content: center; line-height: 1.25; pointer-events: none; }
 .task-name-text { font-size: 13px; font-weight: 700; white-space: nowrap; }
 .task-team-text { font-size: 11px; font-weight: 500; opacity: 0.9; white-space: nowrap; }
 
@@ -97,25 +92,11 @@ body {
 
 /* Badges */
 .badge-group { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.badge { 
-    color: #fff; font-size: 10px; font-weight: 900; border-radius: 50%; 
-    display: flex; align-items: center; justify-content: center; 
-    border: 1.5px solid rgba(255,255,255,0.4); flex-shrink: 0;
-}
+.badge { color: #fff; font-size: 10px; font-weight: 900; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.4); flex-shrink: 0; }
 .badge.lead { width: 28px; height: 28px; background: rgba(0,0,0,0.25); border-width: 2px; }
 .badge.support { width: 22px; height: 22px; }
 
-.badges-outside {
-    position: absolute; right: calc(100% + 10px); 
-    background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 20px;
-    border: 1px solid var(--grid-border); flex-direction: row-reverse;
-}
-
-/* Milestones */
-.milestone-lane-item { position: absolute; height: 42px; display: flex; align-items: center; z-index: 10; cursor: pointer; }
-.milestone-diamond { width: 16px; height: 16px; background: var(--milestone-gold); transform: rotate(45deg); border: 2.5px solid #fff; margin-right: 12px; }
-.milestone-lane-label { font-size: 14px; font-weight: 800; color: var(--milestone-gold); background: var(--milestone-bg); padding: 5px 12px; border-radius: 6px; border: 1.5px solid rgba(180, 83, 9, 0.3); }
-.date-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--milestone-gold); opacity: 0.15; pointer-events: none; }
+.badges-outside { position: absolute; right: calc(100% + 10px); background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 20px; border: 1px solid var(--grid-border); flex-direction: row-reverse; }
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 200; }
@@ -131,7 +112,17 @@ body {
 .form-group input, .form-group select { width: 100%; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; }
 
 .collaborator-box { border: 1px solid #cbd5e1; border-radius: 8px; max-height: 200px; overflow-y: auto; background: #fff; }
-.collaborator-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-size: 14px; font-weight: 600; text-transform: uppercase; }
-.collaborator-item input { width: 20px; height: 20px; margin-right: 12px; flex-shrink: 0; }
+.collaborator-item { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-size: 14px; font-weight: 600; text-transform: uppercase; }
+.collaborator-item input { width: 18px; height: 18px; margin-right: 12px; flex-shrink: 0; }
+
+/* Dynamic Pill List in Modal */
+.collab-pills-container {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 12px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; min-height: 48px;
+}
+.collab-pill {
+    background: white; border: 1px solid #cbd5e1; border-radius: 20px; padding: 4px 12px;
+    font-size: 12px; font-weight: 700; color: var(--text-main); box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
 
 @keyframes tbc-pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }

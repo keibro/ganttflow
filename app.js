@@ -1,5 +1,5 @@
 /**
- * Gantt Flow - Multi-line Label Manager (Surname Sorted)
+ * Gantt Flow - Roadmap Manager Logic
  */
 
 let staffInfo = {};
@@ -14,9 +14,6 @@ const PROFESSIONAL_PALETTE = ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f",
 
 // --- Sorting Helper ---
 
-/**
- * Returns staff list (excluding TBC) sorted alphabetically by surname.
- */
 function getStaffSortedBySurname() {
     return Object.entries(staffInfo)
         .filter(([id]) => id !== 'TBC')
@@ -54,13 +51,8 @@ function getMonthPreview(val) {
     return `${p} ${entry.label}`;
 }
 
-function sortProjects() {
-    projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
-}
-
 function updateInitials() {
-    const sortedBySurname = getStaffSortedBySurname();
-    sortedBySurname.forEach(([id, data]) => {
+    getStaffSortedBySurname().forEach(([id, data]) => {
         const nameParts = data.name.trim().split(/\s+/);
         let base = (nameParts.length > 1) ? (nameParts[0][0] + nameParts[nameParts.length-1][0]) : nameParts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
@@ -69,8 +61,7 @@ function updateInitials() {
 }
 
 function assignColors() {
-    const sortedBySurname = getStaffSortedBySurname();
-    sortedBySurname.forEach(([id], index) => { 
+    getStaffSortedBySurname().forEach(([id], index) => { 
         staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
     });
     if (!staffInfo['TBC']) staffInfo['TBC'] = { name: 'Unassigned', color: '#64748b' };
@@ -86,30 +77,13 @@ function loadData() {
         projects = data.projects || []; staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    sortProjects(); assignColors(); initTimelineRange(); initFilters(); render();
+    assignColors(); initTimelineRange(); initFilters(); render();
 }
 
 function persist() {
     localStorage.setItem('gantt_flow_v25_final', JSON.stringify({ config, staff: staffInfo, projects }));
     const statusEl = document.getElementById('save-status');
     statusEl.textContent = "Flow Saved " + new Date().toLocaleTimeString();
-}
-
-function exportData() {
-    const blob = new Blob([JSON.stringify({ config, staff: staffInfo, projects }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
-}
-
-function triggerImport() { document.getElementById('importFile').click(); }
-function handleFileImport(e) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const imported = JSON.parse(ev.target.result);
-        projects = imported.projects || []; staffInfo = imported.staff || {};
-        sortProjects(); assignColors(); initTimelineRange(); initFilters(); render(); persist();
-    };
-    reader.readAsText(e.target.files[0]);
 }
 
 // --- UI Logic ---
@@ -119,8 +93,6 @@ function toggleSidebar() { document.getElementById('sidebar').classList.toggle('
 function initFilters() {
     const container = document.getElementById('filter-list');
     container.innerHTML = `<button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')">All Projects</button>`;
-    
-    // Updated to sort by Surname
     getStaffSortedBySurname().forEach(([key, info]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-item'; btn.id = `f-${key}`;
@@ -152,19 +124,62 @@ function openModal(title, subtitle, bodyHtml, onDelete) {
 }
 function closeModal() { document.getElementById('editorModal').style.display = 'none'; }
 
-function setupLivePreviews() {
-    ['e_start', 'e_end', 'e_month'].forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.oninput = () => {
-            const badge = document.getElementById(id + '_preview');
-            if (badge) badge.textContent = getMonthPreview(parseFloat(input.value));
-        };
-    });
+function updateCollabPreview() {
+    const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked'))
+        .map(cb => staffInfo[cb.value]?.name || 'Unknown');
+    const container = document.getElementById('e_collab_preview');
+    if (!container) return;
+
+    if (selected.length === 0) {
+        container.innerHTML = '<span style="color: #94a3b8; font-size: 12px; font-style: italic;">No collaborators selected</span>';
+    } else {
+        container.innerHTML = selected.map(name => `<span class="collab-pill">${name}</span>`).join('');
+    }
 }
 
 // --- Actions ---
 
-function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [] }); sortProjects(); render(); persist(); }
+function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [] }); render(); persist(); }
+
+function editTask(pIdx, tIdx) {
+    editingContext = { type: 'task', pIdx, tIdx };
+    const t = projects[pIdx].tasks[tIdx];
+    const sortedStaff = getStaffSortedBySurname();
+    
+    const collaboratorList = sortedStaff.map(([k, v]) => `
+        <label class="collaborator-item">
+            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''} onchange="updateCollabPreview()">
+            <span>${v.name}</span>
+        </label>`).join('');
+
+    const leadOptions = [ ['TBC', staffInfo['TBC']], ...sortedStaff ]
+        .map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
+
+    openModal("Edit Task", "Configure details", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Task Name</label><input type="text" id="e_title" value="${t.name}"></div>
+            <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
+            <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
+            <div class="form-group full-width"><label>Project Lead</label><select id="e_lead">${leadOptions}</select></div>
+            <div class="form-group full-width" style="margin-top: 10px;">
+                <label>Selected Collaborators</label>
+                <div id="e_collab_preview" class="collab-pills-container"></div>
+                <label style="margin-top: 10px;">Select from Team</label>
+                <div class="collaborator-box">${collaboratorList}</div>
+            </div>
+        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
+    
+    // Initial pill load
+    updateCollabPreview();
+    
+    // Add live timing previews
+    ['e_start', 'e_end'].forEach(id => {
+        document.getElementById(id).oninput = () => {
+            document.getElementById(id + '_preview').textContent = getMonthPreview(parseFloat(document.getElementById(id).value));
+        };
+    });
+}
+
 function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
     openModal("Project Settings", "Settings", `<div class="form-group"><label>Title</label><input type="text" id="e_title" value="${projects[pIdx].name}"></div><div style="display:flex; gap:10px; margin-top:10px;"><button class="btn btn-success" style="flex:1" onclick="addTask(${pIdx})">Add Task</button><button class="btn btn-primary" style="flex:1" onclick="addMilestone(${pIdx})">Add Milestone</button></div>`, () => { projects.splice(pIdx,1); closeModal(); render(); persist(); });
@@ -173,40 +188,14 @@ function editProject(pIdx) {
 function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', start: 1, end: 3, lead: 'TBC', support: [] }); closeModal(); render(); persist(); }
 function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: 2 }); closeModal(); render(); persist(); }
 
-function editTask(pIdx, tIdx) {
-    editingContext = { type: 'task', pIdx, tIdx };
-    const t = projects[pIdx].tasks[tIdx];
-    
-    // Updated to sort by Surname
-    const sortedStaff = getStaffSortedBySurname();
-    
-    const collaboratorList = sortedStaff.map(([k, v]) => `
-        <label class="collaborator-item">
-            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''}>
-            <span>${v.name}</span>
-        </label>`).join('');
-
-    const leadOptions = [
-        ['TBC', staffInfo['TBC']],
-        ...sortedStaff
-    ].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
-
-    openModal("Edit Task", "Details", `
-        <div class="form-grid">
-            <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
-            <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
-            <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
-            <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
-            <div class="form-group full-width"><label>Collaborators</label><div class="collaborator-box">${collaboratorList}</div></div>
-        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
-    setupLivePreviews();
-}
-
 function editMilestone(pIdx, mIdx) {
     editingContext = { type: 'milestone', pIdx, mIdx };
     const m = projects[pIdx].milestones[mIdx];
     openModal("Edit Milestone", "Timing", `<div class="form-group"><label>Name</label><input type="text" id="e_title" value="${m.name}"></div><div class="form-group"><label>Month <span id="e_month_preview" class="preview-badge">${getMonthPreview(m.month)}</span></label><input type="number" step="0.1" id="e_month" value="${m.month}"></div>`, () => { projects[pIdx].milestones.splice(mIdx,1); closeModal(); render(); persist(); });
-    setupLivePreviews();
+    // Live preview
+    document.getElementById('e_month').oninput = () => {
+        document.getElementById('e_month_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_month').value));
+    };
 }
 
 function saveChanges() {
@@ -230,7 +219,6 @@ function saveChanges() {
 
 function manageStaff() {
     let html = `<div class="staff-manager-list">`;
-    // Updated to sort by Surname
     getStaffSortedBySurname().forEach(([id, info]) => {
         html += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee"><span>${info.name}</span><button class="btn btn-sm" onclick="deleteStaff('${id}')">Delete</button></div>`;
     });
@@ -246,6 +234,23 @@ function addStaff() {
     assignColors(); initFilters(); manageStaff(); persist();
 }
 function deleteStaff(id) { delete staffInfo[id]; assignColors(); initFilters(); manageStaff(); persist(); }
+
+function triggerImport() { document.getElementById('importFile').click(); }
+function handleFileImport(e) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const imported = JSON.parse(ev.target.result);
+        projects = imported.projects || []; staffInfo = imported.staff || {};
+        assignColors(); initTimelineRange(); initFilters(); render(); persist();
+    };
+    reader.readAsText(e.target.files[0]);
+}
+
+function exportData() {
+    const blob = new Blob([JSON.stringify({ config, staff: staffInfo, projects }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
+}
 
 // --- Render Engine ---
 
@@ -293,8 +298,7 @@ function render() {
 
                 const barWidthPx = (((item.end - item.start) / totalCols) * gridWidth);
                 const badgeWidth = 28 + (supportNames.length * 24) + 20; 
-                const longestLineChars = Math.max(item.name.length, teamString.length);
-                const textWidth = longestLineChars * 7.5;
+                const textWidth = Math.max(item.name.length, teamString.length) * 7.5;
 
                 const badgesOutside = barWidthPx < (badgeWidth - 10);
                 const labelOutside = barWidthPx < (badgeWidth + textWidth);
@@ -306,8 +310,6 @@ function render() {
                 el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
 
-                const tbcClass = (item.lead === 'TBC') ? 'tbc-warning' : '';
-                
                 const badgesHtml = `
                     <div class="badge-group ${badgesOutside ? 'badges-outside' : ''}">
                         <div class="badge lead">${leadData.displayInitials}</div>
@@ -320,7 +322,7 @@ function render() {
                         <div class="task-team-text">${teamString}</div>
                     </div>`;
 
-                el.innerHTML = `<div class="task-bar ${tbcClass}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
+                el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
                 area.appendChild(el);
             } else {
                 const mEl = document.createElement('div');
