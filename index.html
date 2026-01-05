@@ -18,8 +18,11 @@
             <button class="btn btn-toggle" onclick="toggleSidebar()" title="Close Sidebar">✕</button>
         </div>
         <div class="sidebar-content">
-            <button class="btn btn-primary" style="width: 100%; margin-bottom: 20px;" onclick="manageStaff()">
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 10px;" onclick="manageStaff()">
                 <i class="fa-solid fa-user-group"></i> Manage Team
+            </button>
+            <button class="btn btn-accent" style="width: 100%; margin-bottom: 20px;" onclick="configureTimeline()">
+                <i class="fa-solid fa-calendar-days"></i> Timeline Settings
             </button>
             <h3>Filter by Assignment</h3>
             <div id="filter-list"></div>
@@ -38,7 +41,7 @@
             <div class="action-group">
                 <div id="save-status">Checking storage...</div>
                 <button class="btn btn-success" onclick="addProject()"><i class="fa-solid fa-folder-plus"></i> Project</button>
-                <button class="btn btn-accent" onclick="triggerImport()"><i class="fa-solid fa-file-import"></i> Import</button>
+                <button class="btn btn-accent" onclick="triggerImport()"><i class="fa-solid :fa-file-import"></i> Import</button>
                 <button class="btn btn-primary" onclick="exportData()"><i class="fa-solid fa-file-export"></i> Export JSON</button>
                 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleFileImport(event)">
             </div>
