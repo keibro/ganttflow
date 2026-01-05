@@ -38,11 +38,28 @@
                     <span class="subtitle">mapping tasks and milestones</span>
                 </div>
             </div>
+            
             <div class="action-group">
                 <div id="save-status">Checking storage...</div>
-                <button class="btn btn-success" onclick="addProject()"><i class="fa-solid fa-folder-plus"></i> Project</button>
-                <button class="btn btn-accent" onclick="triggerImport()"><i class="fa-solid :fa-file-import"></i> Import</button>
-                <button class="btn btn-primary" onclick="exportData()"><i class="fa-solid fa-file-export"></i> Export JSON</button>
+                
+                <div class="action-divider"></div>
+
+                <button class="btn btn-success primary-action" onclick="addProject()">
+                    <i class="fa-solid fa-folder-plus"></i>
+                    <span>Project</span>
+                </button>
+
+                <div class="button-group">
+                    <button class="btn" title="Import JSON" onclick="triggerImport()">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>Import</span>
+                    </button>
+                    <button class="btn" title="Export JSON" onclick="exportData()">
+                        <i class="fa-solid fa-file-export"></i>
+                        <span>Export JSON</span>
+                    </button>
+                </div>
+                
                 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleFileImport(event)">
             </div>
         </nav>

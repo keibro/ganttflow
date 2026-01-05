@@ -1,3 +1,7 @@
+/**
+ * Gantt Flow Logic
+ */
+
 let staffInfo = {};
 let projects = [];
 let config = { startYear: 2026, startMonth: 1, endYear: 2027, endMonth: 2 }; 
@@ -19,7 +23,7 @@ const iconMap = {
     'report': { class: 'fa-chart-pie', label: 'Analysis' }
 };
 
-// --- Helpers ---
+// --- Calendar Helpers ---
 
 function dateToViewIndex(monthVal, year) {
     const monthsDiff = (year - config.startYear) * 12 + (monthVal - config.startMonth);
@@ -34,6 +38,8 @@ function getMonthPreview(val, year) {
     let p = (decimal < 0.4) ? "Early" : (decimal < 0.7) ? "Mid" : "Late";
     return `${p} ${mName} ${year}`;
 }
+
+// --- Helpers ---
 
 function getStaffSortedBySurname() {
     return Object.entries(staffInfo)
@@ -61,8 +67,8 @@ function initTimelineRange() {
 
 function updateInitials() {
     getStaffSortedBySurname().forEach(([id, data]) => {
-        const parts = data.name.trim().split(/\s+/);
-        let base = (nameParts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
+        const nameParts = data.name.trim().split(/\s+/);
+        let base = (nameParts.length > 1) ? (nameParts[0][0] + nameParts[nameParts.length-1][0]) : nameParts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
     });
     if (staffInfo['TBC']) staffInfo['TBC'].displayInitials = 'TBC';
@@ -79,7 +85,7 @@ function sortProjects() {
     projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
 }
 
-// --- Persistence ---
+// --- Persistence & Status ---
 
 function loadData() {
     const saved = localStorage.getItem('gantt_flow_v25_final');
@@ -89,7 +95,7 @@ function loadData() {
         if (data.config) config = data.config;
     }
     sortProjects(); assignColors(); initTimelineRange(); initFilters(); render();
-    updateStatusMessage("Flow Loaded", false);
+    updateStatusMessage("Flow Loaded - No Changes", false);
     hasChanges = false;
 }
 
@@ -106,13 +112,13 @@ function persist() {
 
 function updateStatusMessage(text, isWarning) {
     const el = document.getElementById('save-status');
-    if (el) {
-        el.textContent = text;
-        el.className = isWarning ? 'unsaved' : 'saved';
-    }
+    if (!el) return;
+    const icon = isWarning ? '<i class="fa-solid fa-circle-exclamation fa-fade"></i>' : '<i class="fa-solid fa-circle-check"></i>';
+    el.innerHTML = `${icon} <span>${text}</span>`;
+    el.className = isWarning ? 'unsaved' : 'saved';
 }
 
-// --- Sidebar ---
+// --- Sidebar & UI ---
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
@@ -158,7 +164,7 @@ function configureTimeline() {
     document.getElementById('conf_endYear').value = config.endYear;
 }
 
-// --- Modal Mgmt ---
+// --- Modals ---
 
 function openModal(title, subtitle, bodyHtml, onDelete) {
     document.getElementById('modalTitle').textContent = title;
@@ -176,6 +182,12 @@ function openModal(title, subtitle, bodyHtml, onDelete) {
 
 function closeModal() { document.getElementById('editorModal').style.display = 'none'; editingContext = null; }
 
+function updateCollabPreview() {
+    const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(cb => staffInfo[cb.value]?.name || 'Unknown');
+    const container = document.getElementById('e_collab_preview');
+    if (container) container.innerHTML = selected.length ? selected.map(n => `<span class="collab-pill">${n}</span>`).join('') : '<span style="color:#94a3b8; font-style:italic; font-size:12px;">No collaborators selected</span>';
+}
+
 function filterCollabs(query) {
     const q = query.toLowerCase();
     document.querySelectorAll('.collaborator-item').forEach(item => {
@@ -192,12 +204,6 @@ function toggleCollabCard(el, id) {
     markModified();
 }
 
-function updateCollabPreview() {
-    const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(cb => staffInfo[cb.value]?.name || 'Unknown');
-    const container = document.getElementById('e_collab_preview');
-    if (container) container.innerHTML = selected.length ? selected.map(n => `<span class="collab-pill">${n}</span>`).join('') : '<em>No team members selected</em>';
-}
-
 // --- Actions ---
 
 function addProject() { 
@@ -211,13 +217,19 @@ function addProject() {
 function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
     const p = projects[pIdx];
-    const goalsHtml = (p.goals || []).map((g, i) => `<div class="goal-editor-row"><div class="goal-number">${i+1}</div><input type="text" class="goal-edit-input" value="${g}" oninput="updateGoalText(${pIdx}, ${i}, this.value)"><button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})"><i class="fa-solid fa-trash"></i></button></div>`).join('');
+    const goalsHtml = (p.goals || []).map((g, i) => `
+        <div class="goal-editor-row">
+            <div class="goal-number">${i+1}</div>
+            <input type="text" class="goal-edit-input" value="${g}" oninput="updateGoalText(${pIdx}, ${i}, this.value)" placeholder="Edit goal...">
+            <button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})" title="Remove"><i class="fa-solid fa-trash"></i></button>
+        </div>`).join('');
+
     openModal("Project Settings", "Objectives", `
-        <div class="form-group"><label>Title</label><input type="text" id="e_title" value="${p.name}"></div>
+        <div class="form-group"><label>Project Title</label><input type="text" id="e_title" value="${p.name}"></div>
         <div class="goal-manager-section">
-            <label>Goals</label>
-            <div class="goal-input-group"><input type="text" id="new_goal_text" placeholder="New goal..."><button class="btn-add" onclick="addGoal(${pIdx})">+</button></div>
-            <div class="goal-editor-list">${goalsHtml}</div>
+            <label><i class="fa-solid fa-bullseye"></i> Key Objectives</label>
+            <div class="goal-input-group"><input type="text" id="new_goal_text" placeholder="Add goal..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})"><button class="btn-add" onclick="addGoal(${pIdx})"><i class="fa-solid fa-plus"></i></button></div>
+            <div class="goal-editor-list">${goalsHtml || '<div style="text-align:center; padding:10px; color:#94a3b8; font-size:13px;">No goals defined yet.</div>'}</div>
         </div>
         <div style="display:flex; gap:10px; margin-top:20px; border-top:1px solid #eee; padding-top:15px;">
             <button class="btn btn-success" style="flex:1" onclick="addTask(${pIdx})">Add Task</button>
@@ -241,13 +253,13 @@ function manageStaff() {
     ss.forEach(([id, info]) => {
         html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editStaffMember('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteStaff('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
     });
-    openModal("Team Directory", "Team roles", html + `</div>`);
+    openModal("Team Directory", "Manage roles", html + `</div>`);
     const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()">+ Add Member</button><button class="btn" onclick="closeModal()">Close</button>`;
+    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button class="btn" onclick="closeModal()">Close</button>`;
 }
 
-function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
-function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
+function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Create profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
+function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Update record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
 
 function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
@@ -258,9 +270,10 @@ function editTask(pIdx, tIdx) {
         return `<div class="collaborator-item ${isChecked ? 'selected' : ''}" onclick="toggleCollabCard(this, '${k}')"><input type="checkbox" name="collab" value="${k}" ${isChecked ? 'checked' : ''}><div class="collab-avatar" style="background:${v.color}">${v.displayInitials}</div><div class="collab-info"><strong>${v.name}</strong><span>${v.role}</span></div></div>`;
     }).join('');
     const leadOptions = [['TBC', staffInfo['TBC']], ...sorted].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
-    const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
+    const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+    const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
 
-    openModal("Edit Task", "Schedule", `
+    openModal("Edit Task", "Configure assignments", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
             <div class="form-group"><label>Start Month (1-12)</label><input type="number" step="0.1" id="e_start_m" value="${t.startMonth || 1}"></div>
@@ -280,9 +293,10 @@ function editMilestone(pIdx, mIdx) {
     editingContext = { type: 'milestone', pIdx, mIdx };
     const m = projects[pIdx].milestones[mIdx];
     const iconHtml = Object.entries(iconMap).map(([k,v]) => `<div class="icon-btn ${m.icon === k ? 'active' : ''}" onclick="window.selectIcon(this, '${k}')"><i class="fa-solid ${v.class}"></i><span>${v.label}</span></div>`).join('');
-    const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
+    const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+    const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
 
-    openModal("Edit Milestone", "Schedule", `
+    openModal("Edit Milestone", "Timing", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Title</label><input type="text" id="e_title" value="${m.name}"></div>
             <div class="form-group"><label>Month (1-12)</label><input type="number" step="0.1" id="e_m" value="${m.month || 1}"></div>
@@ -292,14 +306,8 @@ function editMilestone(pIdx, mIdx) {
     document.getElementById('e_y').value = m.year || config.startYear;
 }
 
-function addTask(pIdx) { 
-    projects[pIdx].tasks.push({ name: 'New Task', startMonth: config.startMonth, startYear: config.startYear, endMonth: config.startMonth+1, endYear: config.startYear, lead: 'TBC', support: [] }); 
-    markModified(); closeModal(); render(); persist(); 
-}
-function addMilestone(pIdx) { 
-    projects[pIdx].milestones.push({ name: 'Milestone', month: config.startMonth, year: config.startYear, icon: 'none' }); 
-    markModified(); closeModal(); render(); persist(); 
-}
+function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', startMonth: config.startMonth, startYear: config.startYear, endMonth: config.startMonth+1, endYear: config.startYear, lead: 'TBC', support: [] }); markModified(); closeModal(); render(); persist(); }
+function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: config.startMonth, year: config.startYear, icon: 'none' }); markModified(); closeModal(); render(); persist(); }
 
 window.selectIcon = function(el, key) { document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); document.getElementById('e_icon').value = key; markModified(); }
 
@@ -322,29 +330,18 @@ function saveChanges() {
     if (ctx.type === 'project') projects[ctx.pIdx].name = document.getElementById('e_title').value;
     if (ctx.type === 'task') {
         const t = projects[ctx.pIdx].tasks[ctx.tIdx];
-        Object.assign(t, { 
-            name: document.getElementById('e_title').value, 
-            startMonth: parseFloat(document.getElementById('e_start_m').value), 
-            startYear: parseInt(document.getElementById('e_start_y').value),
-            endMonth: parseFloat(document.getElementById('e_end_m').value), 
-            endYear: parseInt(document.getElementById('e_end_y').value),
-            lead: document.getElementById('e_lead').value, 
-            support: Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(c => ({ staff: c.value })) 
-        });
+        Object.assign(t, { name: document.getElementById('e_title').value, startMonth: parseFloat(document.getElementById('e_start_m').value), startYear: parseInt(document.getElementById('e_start_y').value), endMonth: parseFloat(document.getElementById('e_end_m').value), endYear: parseInt(document.getElementById('e_end_y').value), lead: document.getElementById('e_lead').value, support: Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(c => ({ staff: c.value })) });
     }
     if (ctx.type === 'milestone') {
         const m = projects[ctx.pIdx].milestones[ctx.mIdx];
-        Object.assign(m, { 
-            name: document.getElementById('e_title').value, 
-            month: parseFloat(document.getElementById('e_m').value), 
-            year: parseInt(document.getElementById('e_y').value),
-            icon: document.getElementById('e_icon').value 
-        });
+        Object.assign(m, { name: document.getElementById('e_title').value, month: parseFloat(document.getElementById('e_m').value), year: parseInt(document.getElementById('e_y').value), icon: document.getElementById('e_icon').value });
     }
     markModified(); closeModal(); render(); persist();
 }
 
 function deleteStaff(id) { projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); })); delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageStaff(); }
+
+// --- IO ---
 
 function triggerImport() { document.getElementById('importFile').click(); }
 function handleFileImport(e) {
@@ -357,8 +354,7 @@ function handleFileImport(e) {
             assignColors(); initTimelineRange(); initFilters(); render(); persist();
             updateStatusMessage("Flow Loaded", false);
         } catch (err) {
-            alert("Error parsing JSON. Check for missing brackets or trailing commas.");
-            console.error(err);
+            alert("Error parsing JSON.");
         }
     };
     reader.readAsText(e.target.files[0]);
@@ -369,8 +365,10 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
     hasChanges = false;
-    updateStatusMessage(`Exported ${new Date().toLocaleTimeString()}`, false);
+    updateStatusMessage(`Exported ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
 }
+
+// --- Render ---
 
 function render() {
     const container = document.getElementById('timeline');
@@ -393,15 +391,8 @@ function render() {
         if (!isVisible) return;
 
         const displayItems = [
-            ...p.tasks.map((t, idx) => ({ 
-                ...t, type: 'task', oIdx: idx, 
-                viewStart: dateToViewIndex(t.startMonth, t.startYear),
-                viewEnd: dateToViewIndex(t.endMonth, t.endYear)
-            })),
-            ...p.milestones.map((m, idx) => ({ 
-                ...m, type: 'milestone', oIdx: idx, 
-                viewStart: dateToViewIndex(m.month, m.year)
-            }))
+            ...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, viewStart: dateToViewIndex(t.startMonth, t.startYear), viewEnd: dateToViewIndex(t.endMonth, t.endYear) })),
+            ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, viewStart: dateToViewIndex(m.month, m.year) }))
         ].sort((a,b) => (a.viewStart !== b.viewStart) ? (a.viewStart - b.viewStart) : (a.type === 'milestone' ? -1 : 1));
 
         const rowHeight = Math.max(120, (displayItems.length * 65) + 40);
@@ -434,21 +425,17 @@ function render() {
                 const labelOutside = barWidthPx < (badgeWidth + (item.name.length * 7.5));
 
                 const el = document.createElement('div');
-                el.className = 'task-item'; 
-                el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; 
-                el.style.width = `${barWidthPercent}%`; 
-                el.style.top = `${vTop}px`;
+                el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
                 
                 const badgesHtml = `<div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}"><div class="badge lead">${leadData.displayInitials}</div>${(item.support||[]).map(s => `<div class="badge support" style="background:${staffInfo[s.staff]?.color || '#64748b'}">${staffInfo[s.staff]?.displayInitials || '?'}</div>`).join('')}</div>`;
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
+                
                 el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
                 area.appendChild(el);
             } else {
                 const mEl = document.createElement('div');
-                mEl.className = 'milestone-lane-item'; 
-                mEl.style.left = `${((item.viewStart - 1) / totalCols) * 100}%`; 
-                mEl.style.top = `${vTop}px`;
+                mEl.className = 'milestone-lane-item'; mEl.style.left = `${((item.viewStart - 1) / totalCols) * 100}%`; mEl.style.top = `${vTop}px`;
                 mEl.onclick = () => editMilestone(pIdx, item.oIdx);
                 const vLine = document.createElement('div');
                 vLine.className = 'date-line'; vLine.style.height = rowHeight + "px"; vLine.style.top = `-${vTop}px`; 
