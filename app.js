@@ -1,5 +1,5 @@
 /**
- * Gantt Flow - Roadmap Manager Logic
+ * Gantt Flow Logic
  */
 
 let staffInfo = {};
@@ -8,6 +8,7 @@ let config = { startYear: 2026, startMonth: 1, endYear: 2026, endMonth: 12 };
 let timelineMonths = []; 
 let currentFilter = 'ALL';
 let editingContext = null;
+let hasChanges = false;
 
 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PROFESSIONAL_PALETTE = ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f","#90be6d","#43aa8b","#4d908e","#577590","#277da1"];
@@ -74,7 +75,7 @@ function assignColors() {
     updateInitials();
 }
 
-// --- Persistence ---
+// --- Persistence & Status ---
 
 function loadData() {
     const saved = localStorage.getItem('gantt_flow_v25_final');
@@ -84,14 +85,28 @@ function loadData() {
         if (data.config) config = data.config;
     }
     assignColors(); initTimelineRange(); initFilters(); render();
+    updateStatusMessage("Flow Loaded - No Changes", false);
+    hasChanges = false;
+}
+
+function markModified() {
+    hasChanges = true;
+    updateStatusMessage("Unsaved Changes", true);
 }
 
 function persist() {
     localStorage.setItem('gantt_flow_v25_final', JSON.stringify({ config, staff: staffInfo, projects }));
-    document.getElementById('save-status').textContent = "Flow Saved " + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    updateStatusMessage(`Flow Saved ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
+    hasChanges = false;
 }
 
-// --- UI Actions ---
+function updateStatusMessage(text, isWarning) {
+    const el = document.getElementById('save-status');
+    el.textContent = text;
+    el.className = isWarning ? 'unsaved' : 'saved';
+}
+
+// --- Sidebar & Filter Logic ---
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
@@ -104,15 +119,32 @@ function setFilter(key) {
 
 function initFilters() {
     const container = document.getElementById('filter-list');
-    container.innerHTML = `<button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')">All Projects</button>`;
+    
+    // RE-ADDED: Unassigned filter button
+    container.innerHTML = `
+        <button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')">
+            <i class="fa-solid fa-layer-group"></i> All Projects
+        </button>
+        <button class="filter-item" id="f-TBC" onclick="setFilter('TBC')">
+            <i class="fa-solid fa-user-slash"></i> Unassigned
+        </button>
+    `;
+    
     getStaffSortedBySurname().forEach(([key, info]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-item'; btn.id = `f-${key}`;
-        btn.innerHTML = `<div style="display:flex; align-items:center; gap:12px;"><div class="filter-color-dot" style="background:${info.color}"></div><div class="filter-info"><strong>${info.name}</strong><br><small>${info.role}</small></div></div>`;
+        btn.innerHTML = `
+            <div class="filter-color-dot" style="background:${info.color}"></div>
+            <div class="filter-info">
+                <strong>${info.name}</strong><br>
+                <small>${info.role}</small>
+            </div>`;
         btn.onclick = () => setFilter(key);
         container.appendChild(btn);
     });
 }
+
+// --- Modal Management ---
 
 function openModal(title, subtitle, bodyHtml, onDelete) {
     document.getElementById('modalTitle').textContent = title;
@@ -138,46 +170,77 @@ function updateCollabPreview() {
     container.innerHTML = selected.length ? selected.map(n => `<span class="collab-pill">${n}</span>`).join('') : '<span style="color:#94a3b8; font-style:italic; font-size:12px;">No collaborators selected</span>';
 }
 
-function selectIcon(el, key) {
-    document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
-    el.classList.add('active');
-    document.getElementById('e_icon').value = key;
+function filterCollabs(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.collaborator-item').forEach(item => {
+        const name = item.querySelector('strong').textContent.toLowerCase();
+        item.style.display = name.includes(q) ? 'flex' : 'none';
+    });
 }
 
-// --- Project Logic ---
+function toggleCollabCard(el, id) {
+    const checkbox = el.querySelector('input');
+    checkbox.checked = !checkbox.checked;
+    el.classList.toggle('selected', checkbox.checked);
+    updateCollabPreview();
+    markModified();
+}
 
-function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [], goals: [] }); render(); persist(); }
+// --- Project & Goal Logic ---
+
+function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [], goals: [] }); markModified(); render(); persist(); }
 
 function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
     const p = projects[pIdx];
-    const goalsHtml = (p.goals || []).map((g, i) => `<div class="goal-editor-row"><div class="goal-text">${g}</div><button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})"><i class="fa-solid fa-xmark"></i></button></div>`).join('');
+    const goalsHtml = (p.goals || []).map((g, i) => `
+        <div class="goal-editor-row">
+            <div class="goal-number">${i+1}</div>
+            <input type="text" class="goal-edit-input" value="${g}" oninput="updateGoalText(${pIdx}, ${i}, this.value)" placeholder="Edit goal...">
+            <button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})" title="Remove"><i class="fa-solid fa-trash"></i></button>
+        </div>`).join('');
 
-    openModal("Project Settings", "Update core info", `
-        <div class="form-group"><label>Title</label><input type="text" id="e_title" value="${p.name}"></div>
+    openModal("Project Settings", "Manage core objectives", `
+        <div class="form-group"><label>Project Title</label><input type="text" id="e_title" value="${p.name}"></div>
         <div class="goal-manager-section">
-            <label>Key Objectives</label>
-            <div class="goal-input-group"><input type="text" id="new_goal_text" placeholder="Objective..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})"><button class="btn-add" onclick="addGoal(${pIdx})">+</button></div>
+            <label><i class="fa-solid fa-bullseye"></i> Objectives & Goals</label>
+            <div class="goal-input-group">
+                <input type="text" id="new_goal_text" placeholder="Add new goal..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})">
+                <button class="btn-add" onclick="addGoal(${pIdx})"><i class="fa-solid fa-plus"></i></button>
+            </div>
             <div class="goal-editor-list">${goalsHtml || '<em>No goals set</em>'}</div>
         </div>
-        <div style="display:flex; gap:10px; margin-top:20px; border-top:1px solid #eee; padding-top:15px;">
-            <button class="btn btn-success" style="flex:1" onclick="addTask(${pIdx})">Add Task</button>
-            <button class="btn btn-primary" style="flex:1" onclick="addMilestone(${pIdx})">Add Milestone</button>
-        </div>`, () => { if(confirm("Delete Project?")) { projects.splice(pIdx,1); closeModal(); render(); persist(); } });
+        <div style="display:flex; gap:10px; margin-top:24px; border-top:1px solid #eee; padding-top:20px;">
+            <button class="btn btn-success" style="flex:1" onclick="addTask(${pIdx})"><i class="fa-solid fa-plus"></i> Task</button>
+            <button class="btn btn-primary" style="flex:1" onclick="addMilestone(${pIdx})"><i class="fa-solid fa-diamond"></i> Milestone</button>
+        </div>`, () => { if(confirm("Delete Project?")) { projects.splice(pIdx,1); markModified(); closeModal(); render(); persist(); } });
 }
 
+function updateGoalText(pIdx, gIdx, val) { projects[pIdx].goals[gIdx] = val; markModified(); }
 function addGoal(pIdx) {
-    const txt = document.getElementById('new_goal_text').value.trim();
-    if (!txt) return;
+    const input = document.getElementById('new_goal_text');
+    if (!input.value.trim()) return;
     if (!projects[pIdx].goals) projects[pIdx].goals = [];
-    projects[pIdx].goals.push(txt);
-    persist(); editProject(pIdx);
+    projects[pIdx].goals.push(input.value.trim());
+    markModified(); persist(); editProject(pIdx);
+}
+function removeGoal(pIdx, gIdx) { projects[pIdx].goals.splice(gIdx, 1); markModified(); persist(); editProject(pIdx); }
+
+// --- Staff Management ---
+
+function manageStaff() {
+    const ss = getStaffSortedBySurname();
+    let html = `<div class="staff-manager-container"><div class="staff-list-header"><div></div><div>Member Info</div><div style="text-align:right">Options</div></div>`;
+    ss.forEach(([id, info]) => {
+        html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editStaffMember('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteStaff('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
+    });
+    openModal("Team Directory", "Manage roles", html + `</div>`);
+    const footer = document.querySelector('.modal-footer');
+    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button class="btn" onclick="closeModal()">Close</button>`;
 }
 
-function removeGoal(pIdx, gIdx) {
-    projects[pIdx].goals.splice(gIdx, 1);
-    persist(); editProject(pIdx);
-}
+function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Create profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
+function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Update record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
 
 // --- Task & Milestone Logic ---
 
@@ -185,11 +248,15 @@ function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
     const t = projects[pIdx].tasks[tIdx];
     const sorted = getStaffSortedBySurname();
-    const collabList = sorted.map(([k, v]) => `
-        <label class="collaborator-item">
-            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''} onchange="updateCollabPreview()">
-            <span>${v.name}</span>
-        </label>`).join('');
+    const collabCards = sorted.map(([k, v]) => {
+        const isChecked = t.support?.some(s => s.staff === k);
+        return `
+        <div class="collaborator-item ${isChecked ? 'selected' : ''}" onclick="toggleCollabCard(this, '${k}')">
+            <input type="checkbox" name="collab" value="${k}" ${isChecked ? 'checked' : ''}>
+            <div class="collab-avatar" style="background:${v.color}">${v.displayInitials}</div>
+            <div class="collab-info"><strong>${v.name}</strong><span>${v.role}</span></div>
+        </div>`;
+    }).join('');
     const leadOptions = [['TBC', staffInfo['TBC']], ...sorted].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
 
     openModal("Edit Task", "Configure assignments", `
@@ -197,83 +264,53 @@ function editTask(pIdx, tIdx) {
             <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
             <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
             <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
-            <div class="form-group full-width"><label>Primary Lead</label><select id="e_lead">${leadOptions}</select></div>
-            <div class="form-group full-width"><label>Selected Team Members</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="collaborator-box">${collabList}</div></div>
-        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
+            <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
+            <div class="form-group full-width"><label>Team</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search team..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${collabCards}</div></div>
+        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); markModified(); closeModal(); render(); persist(); });
     updateCollabPreview();
-    ['e_start', 'e_end'].forEach(id => document.getElementById(id).oninput = () => document.getElementById(id+'_preview').textContent = getMonthPreview(parseFloat(document.getElementById(id).value)));
+    ['e_start', 'e_end'].forEach(id => document.getElementById(id).oninput = () => { document.getElementById(id+'_preview').textContent = getMonthPreview(parseFloat(document.getElementById(id).value)); markModified(); });
 }
-
-function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', start: 1, end: 3, lead: 'TBC', support: [] }); closeModal(); render(); persist(); }
 
 function editMilestone(pIdx, mIdx) {
     editingContext = { type: 'milestone', pIdx, mIdx };
     const m = projects[pIdx].milestones[mIdx];
-    const iconHtml = Object.entries(iconMap).map(([k,v]) => `<div class="icon-btn ${m.icon === k ? 'active' : ''}" onclick="selectIcon(this, '${k}')"><i class="fa-solid ${v.class}"></i><span>${v.label}</span></div>`).join('');
+    const iconHtml = Object.entries(iconMap).map(([k,v]) => `<div class="icon-btn ${m.icon === k ? 'active' : ''}" onclick="window.selectIcon(this, '${k}')"><i class="fa-solid ${v.class}"></i><span>${v.label}</span></div>`).join('');
     openModal("Edit Milestone", "Timing", `
         <div class="form-grid"><div class="form-group full-width"><label>Title</label><input type="text" id="e_title" value="${m.name}"></div>
         <div class="form-group full-width"><label>Date <span id="e_month_preview" class="preview-badge">${getMonthPreview(m.month)}</span></label><input type="number" step="0.1" id="e_month" value="${m.month}"></div>
         <div class="form-group full-width"><label>Icon</label><div class="icon-selector">${iconHtml}</div><input type="hidden" id="e_icon" value="${m.icon || 'none'}"></div></div>`, 
         () => { projects[pIdx].milestones.splice(mIdx,1); closeModal(); render(); persist(); });
-    document.getElementById('e_month').oninput = () => document.getElementById('e_month_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_month').value));
+    document.getElementById('e_month').oninput = () => { document.getElementById('e_month_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_month').value)); markModified(); };
 }
 
-function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: 2, icon: 'none' }); closeModal(); render(); persist(); }
+function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', start: 1, end: 3, lead: 'TBC', support: [] }); markModified(); closeModal(); render(); persist(); }
+function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: 2, icon: 'none' }); markModified(); closeModal(); render(); persist(); }
 
-// --- Team Management ---
+window.selectIcon = function(el, key) { document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); document.getElementById('e_icon').value = key; markModified(); }
 
-function manageStaff() {
-    const ss = getStaffSortedBySurname();
-    let html = `<div class="staff-manager-container"><div class="staff-list-header"><div></div><div>Member Info</div><div style="text-align:right">Actions</div></div>`;
-    ss.forEach(([id, info]) => {
-        html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editStaffMember('${id}')"><i class="fa-solid fa-pen"></i></button><button class="btn-icon delete" onclick="deleteStaff('${id}')"><i class="fa-solid fa-trash"></i></button></div></div>`;
-    });
-    openModal("Team Directory", "Manage roles", html + `</div>`);
-    const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-success" onclick="addNewStaff()"><i class="fa-solid fa-user-plus"></i> Add Member</button><button class="btn" onclick="closeModal()">Close</button>`;
-}
-
-function addNewStaff() {
-    editingContext = { type: 'staff-edit', isNew: true };
-    openModal("Add Member", "Create profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`);
-}
-
-function editStaffMember(id) {
-    const s = staffInfo[id];
-    editingContext = { type: 'staff-edit', isNew: false, targetId: id };
-    openModal("Edit Profile", "Update record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`);
-}
+// --- Global Actions ---
 
 function saveChanges() {
     const ctx = editingContext;
     if (ctx.type === 'staff-edit') {
         const id = ctx.isNew ? "id_" + Date.now() : ctx.targetId;
         staffInfo[id] = { name: document.getElementById('s_name').value, role: document.getElementById('s_role').value };
-        assignColors(); initFilters(); render(); persist(); closeModal(); manageStaff();
+        markModified(); assignColors(); initFilters(); render(); persist(); closeModal(); manageStaff();
         return;
     }
     if (ctx.type === 'project') projects[ctx.pIdx].name = document.getElementById('e_title').value;
     if (ctx.type === 'task') {
         const t = projects[ctx.pIdx].tasks[ctx.tIdx];
-        Object.assign(t, { 
-            name: document.getElementById('e_title').value, 
-            start: parseFloat(document.getElementById('e_start').value), 
-            end: parseFloat(document.getElementById('e_end').value), 
-            lead: document.getElementById('e_lead').value, 
-            support: Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(c => ({ staff: c.value })) 
-        });
+        Object.assign(t, { name: document.getElementById('e_title').value, start: parseFloat(document.getElementById('e_start').value), end: parseFloat(document.getElementById('e_end').value), lead: document.getElementById('e_lead').value, support: Array.from(document.querySelectorAll('input[name="collab"]:checked')).map(c => ({ staff: c.value })) });
     }
     if (ctx.type === 'milestone') {
         const m = projects[ctx.pIdx].milestones[ctx.mIdx];
         Object.assign(m, { name: document.getElementById('e_title').value, month: parseFloat(document.getElementById('e_month').value), icon: document.getElementById('e_icon').value });
     }
-    closeModal(); render(); persist();
+    markModified(); closeModal(); render(); persist();
 }
 
-function deleteStaff(id) {
-    projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); }));
-    delete staffInfo[id]; assignColors(); initFilters(); render(); persist(); manageStaff();
-}
+function deleteStaff(id) { projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); })); delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageStaff(); }
 
 // --- IO ---
 
@@ -284,6 +321,7 @@ function handleFileImport(e) {
         const data = JSON.parse(ev.target.result);
         projects = data.projects || []; staffInfo = data.staff || {};
         assignColors(); initTimelineRange(); initFilters(); render(); persist();
+        updateStatusMessage("Flow Loaded - No Changes", false);
     };
     reader.readAsText(e.target.files[0]);
 }
@@ -292,6 +330,7 @@ function exportData() {
     const blob = new Blob([JSON.stringify({ config, staff: staffInfo, projects }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
+    updateStatusMessage(`Exported ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - No changes`, false);
 }
 
 // --- Render ---
@@ -311,13 +350,13 @@ function render() {
     card.appendChild(header);
 
     projects.forEach((p, pIdx) => {
-        const isVisible = (currentFilter === 'ALL') || p.tasks.some(t => t.lead === currentFilter || t.support?.some(s => s.staff === currentFilter));
+        const isVisible = (currentFilter === 'ALL') || 
+                          (currentFilter === 'TBC' && p.tasks.some(t => t.lead === 'TBC')) || 
+                          p.tasks.some(t => t.lead === currentFilter || t.support?.some(s => s.staff === currentFilter));
         if (!isVisible) return;
 
-        const items = [
-            ...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, date: t.start })),
-            ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, date: m.month }))
-        ].sort((a,b) => (a.date !== b.date) ? (a.date - b.date) : (a.type === 'milestone' ? -1 : 1));
+        const items = [...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, date: t.start })), ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, date: m.month }))]
+            .sort((a,b) => (a.date !== b.date) ? (a.date - b.date) : (a.type === 'milestone' ? -1 : 1));
 
         const rowHeight = Math.max(120, (items.length * 65) + 40);
         const row = document.createElement('div');
@@ -325,7 +364,7 @@ function render() {
 
         const side = document.createElement('div');
         side.className = 'project-sidebar';
-        const gHtml = (p.goals || []).map(g => `<div class="goal-item-sidebar"><i class="fa-solid fa-check"></i><span>${g}</span></div>`).join('');
+        const gHtml = (p.goals || []).map(g => `<div class="goal-item-sidebar"><i class="fa-solid fa-check-double"></i><span>${g}</span></div>`).join('');
         side.innerHTML = `<h4>${p.name}</h4>${p.goals?.length ? `<div class="project-goals-list">${gHtml}</div>` : ''}<button class="btn btn-sm" style="margin-top:15px; width:100%" onclick="editProject(${pIdx})"><i class="fa-solid fa-gear"></i> Manage</button>`;
         row.appendChild(side);
 
