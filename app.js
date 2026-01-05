@@ -1,5 +1,5 @@
 /**
- * Gantt Flow - Roadmap Manager Logic (Milestone Priority)
+ * Gantt Flow - Roadmap Manager Logic
  */
 
 let staffInfo = {};
@@ -15,7 +15,7 @@ const PROFESSIONAL_PALETTE = ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f",
 const iconMap = {
     'none': { class: 'fa-ban', label: 'None' },
     'workshop': { class: 'fa-users', label: 'Workshop' },
-    'document': { class: 'fa-file-lines', label: 'Document' },
+    'document': { class: 'fa-file-lines', label: 'Paperwork' },
     'deployment': { class: 'fa-rocket', label: 'Launch' },
     'meeting': { class: 'fa-handshake', label: 'Meeting' },
     'tech': { class: 'fa-microchip', label: 'Technical' },
@@ -74,7 +74,7 @@ function assignColors() {
     getStaffSortedBySurname().forEach(([id], index) => { 
         staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
     });
-    if (!staffInfo['TBC']) staffInfo['TBC'] = { name: 'Unassigned', color: '#64748b' };
+    if (!staffInfo['TBC']) staffInfo['TBC'] = { name: 'Unassigned', role: 'No specific lead', color: '#64748b' };
     updateInitials();
 }
 
@@ -106,7 +106,13 @@ function initFilters() {
     getStaffSortedBySurname().forEach(([key, info]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-item'; btn.id = `f-${key}`;
-        btn.innerHTML = `<div style="display:flex; align-items:center; gap:10px;"><div class="filter-color-dot" style="background:${info.color}"></div>${info.name}</div>`;
+        btn.innerHTML = `<div style="display:flex; align-items:center; gap:12px;">
+            <div class="filter-color-dot" style="background:${info.color}"></div>
+            <div class="filter-info">
+                <strong>${info.name}</strong><br>
+                <small>${info.role || ''}</small>
+            </div>
+        </div>`;
         btn.onclick = () => setFilter(key);
         container.appendChild(btn);
     });
@@ -124,7 +130,7 @@ function openModal(title, subtitle, bodyHtml, onDelete) {
     document.getElementById('modalSubtitle').textContent = subtitle;
     document.getElementById('modalBody').innerHTML = bodyHtml;
     const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-primary" onclick="saveChanges()">Save</button><button class="btn" onclick="closeModal()">Cancel</button>`;
+    footer.innerHTML = `<button class="btn btn-primary" onclick="saveChanges()">Save Details</button><button class="btn" onclick="closeModal()">Cancel</button>`;
     if (onDelete) {
         const del = document.createElement('button');
         del.className = 'btn btn-danger'; del.textContent = 'Delete'; del.onclick = onDelete;
@@ -132,7 +138,7 @@ function openModal(title, subtitle, bodyHtml, onDelete) {
     }
     document.getElementById('editorModal').style.display = 'flex';
 }
-function closeModal() { document.getElementById('editorModal').style.display = 'none'; }
+function closeModal() { document.getElementById('editorModal').style.display = 'none'; editingContext = null; }
 
 function updateCollabPreview() {
     const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked'))
@@ -176,7 +182,7 @@ function editTask(pIdx, tIdx) {
     const leadOptions = [ ['TBC', staffInfo['TBC']], ...sortedStaff ]
         .map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
 
-    openModal("Edit Task", "Details", `
+    openModal("Edit Task", "Configure details", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
             <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
@@ -221,8 +227,57 @@ function editMilestone(pIdx, mIdx) {
     };
 }
 
+// --- Team Management Logic ---
+
+function manageStaff() {
+    let html = `<div class="staff-manager-list">`;
+    getStaffSortedBySurname().forEach(([id, info]) => {
+        html += `
+        <div class="staff-directory-item">
+            <div class="staff-color-dot" style="background:${info.color}; width:12px; height:12px; border-radius:50%"></div>
+            <div class="staff-directory-info">
+                <strong>${info.name}</strong>
+                <small>${info.role}</small>
+            </div>
+            <button class="btn btn-sm" onclick="editStaffMember('${id}')">Edit</button>
+        </div>`;
+    });
+    html += `</div>`;
+    openModal("Team Directory", "Manage project leads and roles", html);
+    const footer = document.querySelector('.modal-footer');
+    footer.innerHTML = `<button class="btn btn-success" onclick="addNewStaff()">+ Add Member</button><button class="btn" onclick="closeModal()">Close</button>`;
+}
+
+function addNewStaff() {
+    editingContext = { type: 'staff-edit', isNew: true };
+    openModal("Add Staff Member", "Create new record", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Full Name</label><input type="text" id="s_name" placeholder="John Doe"></div>
+            <div class="form-group full-width"><label>Role / Job Title</label><input type="text" id="s_role" placeholder="Solutions Lead"></div>
+        </div>`);
+}
+
+function editStaffMember(id) {
+    const s = staffInfo[id];
+    editingContext = { type: 'staff-edit', isNew: false, targetId: id };
+    openModal("Edit Staff Member", "Update profile", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Full Name</label><input type="text" id="s_name" value="${s.name}"></div>
+            <div class="form-group full-width"><label>Role / Job Title</label><input type="text" id="s_role" value="${s.role}"></div>
+        </div>`, () => deleteStaff(id));
+}
+
 function saveChanges() {
     const ctx = editingContext;
+    if (ctx.type === 'staff-edit') {
+        const id = ctx.isNew ? "id_" + Date.now() : ctx.targetId;
+        const name = document.getElementById('s_name').value;
+        const role = document.getElementById('s_role').value;
+        if (!name) return alert("Name is required");
+        staffInfo[id] = { name, role };
+        assignColors(); initFilters(); render(); persist(); closeModal(); manageStaff();
+        return;
+    }
     if (ctx.type === 'project') projects[ctx.pIdx].name = document.getElementById('e_title').value;
     if (ctx.type === 'task') {
         const t = projects[ctx.pIdx].tasks[ctx.tIdx];
@@ -241,23 +296,13 @@ function saveChanges() {
     closeModal(); render(); persist();
 }
 
-function manageStaff() {
-    let html = `<div class="staff-manager-list">`;
-    getStaffSortedBySurname().forEach(([id, info]) => {
-        html += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee"><span>${info.name}</span><button class="btn btn-sm" onclick="deleteStaff('${id}')">Delete</button></div>`;
-    });
-    html += `</div><div class="form-group" style="margin-top:15px"><label>New Member</label><input type="text" id="new_staff_name"></div>`;
-    openModal("Team", "Manage staff", html);
-    const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-success" onclick="addStaff()">Add</button><button class="btn" onclick="closeModal()">Close</button>`;
+function deleteStaff(id) {
+    projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; }));
+    projects.forEach(p => p.tasks.forEach(t => { if(t.support) t.support = t.support.filter(s => s.staff !== id); }));
+    delete staffInfo[id]; assignColors(); initFilters(); render(); persist(); closeModal(); manageStaff();
 }
 
-function addStaff() {
-    const name = document.getElementById('new_staff_name').value;
-    if (name) staffInfo["id_"+Date.now()] = { name, role: 'Member' };
-    assignColors(); initFilters(); manageStaff(); persist();
-}
-function deleteStaff(id) { delete staffInfo[id]; assignColors(); initFilters(); manageStaff(); persist(); }
+// --- Import/Export ---
 
 function triggerImport() { document.getElementById('importFile').click(); }
 function handleFileImport(e) {
@@ -302,9 +347,7 @@ function render() {
             ...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, date: t.start })),
             ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, date: m.month }))
         ].sort((a,b) => {
-            // Primary Sort: Date
             if (a.date !== b.date) return a.date - b.date;
-            // Secondary Sort: Milestone priority over Tasks
             if (a.type === 'milestone' && b.type === 'task') return -1;
             if (a.type === 'task' && b.type === 'milestone') return 1;
             return 0;
@@ -319,7 +362,7 @@ function render() {
 
         const side = document.createElement('div');
         side.className = 'project-sidebar';
-        side.innerHTML = `<div>${p.name}</div><button class="btn btn-sm" style="font-size:10px; padding:4px 8px; margin-top:8px" onclick="editProject(${pIdx})">Manage</button>`;
+        side.innerHTML = `<div>${p.name}</div><button class="btn btn-sm" style="margin-top:8px" onclick="editProject(${pIdx})">Manage</button>`;
         row.appendChild(side);
 
         const area = document.createElement('div');
@@ -369,7 +412,6 @@ function render() {
                 mEl.style.top = `${vTop}px`;
                 mEl.onclick = () => editMilestone(pIdx, item.oIdx);
                 
-                // Vertical Line
                 const vLine = document.createElement('div');
                 vLine.className = 'date-line';
                 vLine.style.height = rowHeight + "px";
