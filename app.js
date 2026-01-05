@@ -88,7 +88,7 @@ function sortProjects() {
 // --- Persistence & Status ---
 
 function loadData() {
-    const saved = localStorage.getItem('gantt_flow_v25_final');
+    const saved = localStorage.getItem('gantt_flow');
     if (saved) {
         const data = JSON.parse(saved);
         projects = data.projects || []; staffInfo = data.staff || {};
@@ -105,7 +105,7 @@ function markModified() {
 }
 
 function persist() {
-    localStorage.setItem('gantt_flow_v25_final', JSON.stringify({ config, staff: staffInfo, projects }));
+    localStorage.setItem('gantt_flow', JSON.stringify({ config, staff: staffInfo, projects }));
     updateStatusMessage(`Flow Saved ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
     hasChanges = false;
 }
