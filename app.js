@@ -1,5 +1,5 @@
 /**
- * Gantt Flow - Roadmap Manager Logic
+ * Gantt Flow - Roadmap Manager Logic (Milestone Priority)
  */
 
 let staffInfo = {};
@@ -11,6 +11,16 @@ let editingContext = null;
 
 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PROFESSIONAL_PALETTE = ["#f94144","#f3722c","#f8961e","#f9844a","#f9c74f","#90be6d","#43aa8b","#4d908e","#577590","#277da1"];
+
+const iconMap = {
+    'none': { class: 'fa-ban', label: 'None' },
+    'workshop': { class: 'fa-users', label: 'Workshop' },
+    'document': { class: 'fa-file-lines', label: 'Document' },
+    'deployment': { class: 'fa-rocket', label: 'Launch' },
+    'meeting': { class: 'fa-handshake', label: 'Meeting' },
+    'tech': { class: 'fa-microchip', label: 'Technical' },
+    'report': { class: 'fa-chart-pie', label: 'Analysis' }
+};
 
 // --- Sorting Helper ---
 
@@ -129,7 +139,6 @@ function updateCollabPreview() {
         .map(cb => staffInfo[cb.value]?.name || 'Unknown');
     const container = document.getElementById('e_collab_preview');
     if (!container) return;
-
     if (selected.length === 0) {
         container.innerHTML = '<span style="color: #94a3b8; font-size: 12px; font-style: italic;">No collaborators selected</span>';
     } else {
@@ -137,48 +146,15 @@ function updateCollabPreview() {
     }
 }
 
+function selectIcon(el, key) {
+    document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('e_icon').value = key;
+}
+
 // --- Actions ---
 
 function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [] }); render(); persist(); }
-
-function editTask(pIdx, tIdx) {
-    editingContext = { type: 'task', pIdx, tIdx };
-    const t = projects[pIdx].tasks[tIdx];
-    const sortedStaff = getStaffSortedBySurname();
-    
-    const collaboratorList = sortedStaff.map(([k, v]) => `
-        <label class="collaborator-item">
-            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''} onchange="updateCollabPreview()">
-            <span>${v.name}</span>
-        </label>`).join('');
-
-    const leadOptions = [ ['TBC', staffInfo['TBC']], ...sortedStaff ]
-        .map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
-
-    openModal("Edit Task", "Configure details", `
-        <div class="form-grid">
-            <div class="form-group full-width"><label>Task Name</label><input type="text" id="e_title" value="${t.name}"></div>
-            <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
-            <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
-            <div class="form-group full-width"><label>Project Lead</label><select id="e_lead">${leadOptions}</select></div>
-            <div class="form-group full-width" style="margin-top: 10px;">
-                <label>Selected Collaborators</label>
-                <div id="e_collab_preview" class="collab-pills-container"></div>
-                <label style="margin-top: 10px;">Select from Team</label>
-                <div class="collaborator-box">${collaboratorList}</div>
-            </div>
-        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
-    
-    // Initial pill load
-    updateCollabPreview();
-    
-    // Add live timing previews
-    ['e_start', 'e_end'].forEach(id => {
-        document.getElementById(id).oninput = () => {
-            document.getElementById(id + '_preview').textContent = getMonthPreview(parseFloat(document.getElementById(id).value));
-        };
-    });
-}
 
 function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
@@ -186,13 +162,60 @@ function editProject(pIdx) {
 }
 
 function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', start: 1, end: 3, lead: 'TBC', support: [] }); closeModal(); render(); persist(); }
-function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: 2 }); closeModal(); render(); persist(); }
+function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: 2, icon: 'none' }); closeModal(); render(); persist(); }
+
+function editTask(pIdx, tIdx) {
+    editingContext = { type: 'task', pIdx, tIdx };
+    const t = projects[pIdx].tasks[tIdx];
+    const sortedStaff = getStaffSortedBySurname();
+    const collaboratorList = sortedStaff.map(([k, v]) => `
+        <label class="collaborator-item">
+            <input type="checkbox" name="collab" value="${k}" ${t.support?.some(s => s.staff === k) ? 'checked' : ''} onchange="updateCollabPreview()">
+            <span>${v.name}</span>
+        </label>`).join('');
+    const leadOptions = [ ['TBC', staffInfo['TBC']], ...sortedStaff ]
+        .map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
+
+    openModal("Edit Task", "Details", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
+            <div class="form-group"><label>Start <span id="e_start_preview" class="preview-badge">${getMonthPreview(t.start)}</span></label><input type="number" step="0.1" id="e_start" value="${t.start}"></div>
+            <div class="form-group"><label>End <span id="e_end_preview" class="preview-badge">${getMonthPreview(t.end)}</span></label><input type="number" step="0.1" id="e_end" value="${t.end}"></div>
+            <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
+            <div class="form-group full-width">
+                <label>Selected Collaborators</label>
+                <div id="e_collab_preview" class="collab-pills-container"></div>
+                <label>Select Team</label>
+                <div class="collaborator-box">${collaboratorList}</div>
+            </div>
+        </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); closeModal(); render(); persist(); });
+    updateCollabPreview();
+    ['e_start', 'e_end'].forEach(id => {
+        document.getElementById(id).oninput = () => {
+            document.getElementById(id + '_preview').textContent = getMonthPreview(parseFloat(document.getElementById(id).value));
+        };
+    });
+}
 
 function editMilestone(pIdx, mIdx) {
     editingContext = { type: 'milestone', pIdx, mIdx };
     const m = projects[pIdx].milestones[mIdx];
-    openModal("Edit Milestone", "Timing", `<div class="form-group"><label>Name</label><input type="text" id="e_title" value="${m.name}"></div><div class="form-group"><label>Month <span id="e_month_preview" class="preview-badge">${getMonthPreview(m.month)}</span></label><input type="number" step="0.1" id="e_month" value="${m.month}"></div>`, () => { projects[pIdx].milestones.splice(mIdx,1); closeModal(); render(); persist(); });
-    // Live preview
+    const iconHtml = Object.entries(iconMap).map(([k,v]) => `
+        <div class="icon-btn ${m.icon === k ? 'active' : ''}" onclick="selectIcon(this, '${k}')">
+            <i class="fa-solid ${v.class}"></i>
+            <span>${v.label}</span>
+        </div>`).join('');
+
+    openModal("Edit Milestone", "Timing", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${m.name}"></div>
+            <div class="form-group full-width"><label>Month <span id="e_month_preview" class="preview-badge">${getMonthPreview(m.month)}</span></label><input type="number" step="0.1" id="e_month" value="${m.month}"></div>
+            <div class="form-group full-width">
+                <label>Category Icon</label>
+                <div class="icon-selector">${iconHtml}</div>
+                <input type="hidden" id="e_icon" value="${m.icon || 'none'}">
+            </div>
+        </div>`, () => { projects[pIdx].milestones.splice(mIdx,1); closeModal(); render(); persist(); });
     document.getElementById('e_month').oninput = () => {
         document.getElementById('e_month_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_month').value));
     };
@@ -213,6 +236,7 @@ function saveChanges() {
         const m = projects[ctx.pIdx].milestones[ctx.mIdx];
         m.name = document.getElementById('e_title').value;
         m.month = parseFloat(document.getElementById('e_month').value);
+        m.icon = document.getElementById('e_icon').value;
     }
     closeModal(); render(); persist();
 }
@@ -274,12 +298,25 @@ function render() {
         const isVisible = (currentFilter === 'ALL') || p.tasks.some(t => t.lead === currentFilter || t.support?.some(s => s.staff === currentFilter));
         if (!isVisible) return;
 
-        const items = [...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, date: t.start })), ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, date: m.month }))]
-                      .sort((a,b) => a.date - b.date);
+        const items = [
+            ...p.tasks.map((t, idx) => ({ ...t, type: 'task', oIdx: idx, date: t.start })),
+            ...p.milestones.map((m, idx) => ({ ...m, type: 'milestone', oIdx: idx, date: m.month }))
+        ].sort((a,b) => {
+            // Primary Sort: Date
+            if (a.date !== b.date) return a.date - b.date;
+            // Secondary Sort: Milestone priority over Tasks
+            if (a.type === 'milestone' && b.type === 'task') return -1;
+            if (a.type === 'task' && b.type === 'milestone') return 1;
+            return 0;
+        });
+
+        const rowHeight = Math.max(120, (items.length * 65) + 40);
 
         const row = document.createElement('div');
         row.className = 'timeline-row';
         row.style.gridTemplateColumns = `var(--project-col-width) 1fr`;
+        row.style.minHeight = rowHeight + "px";
+
         const side = document.createElement('div');
         side.className = 'project-sidebar';
         side.innerHTML = `<div>${p.name}</div><button class="btn btn-sm" style="font-size:10px; padding:4px 8px; margin-top:8px" onclick="editProject(${pIdx})">Manage</button>`;
@@ -298,7 +335,8 @@ function render() {
 
                 const barWidthPx = (((item.end - item.start) / totalCols) * gridWidth);
                 const badgeWidth = 28 + (supportNames.length * 24) + 20; 
-                const textWidth = Math.max(item.name.length, teamString.length) * 7.5;
+                const longestLineChars = Math.max(item.name.length, teamString.length);
+                const textWidth = longestLineChars * 7.5;
 
                 const badgesOutside = barWidthPx < (badgeWidth - 10);
                 const labelOutside = barWidthPx < (badgeWidth + textWidth);
@@ -327,13 +365,22 @@ function render() {
             } else {
                 const mEl = document.createElement('div');
                 mEl.className = 'milestone-lane-item'; 
-                mEl.style.left = `${((item.month - 1) / totalCols) * 100}%`; mEl.style.top = `${vTop}px`;
+                mEl.style.left = `${((item.month - 1) / totalCols) * 100}%`; 
+                mEl.style.top = `${vTop}px`;
                 mEl.onclick = () => editMilestone(pIdx, item.oIdx);
-                mEl.innerHTML = `<div class="date-line"></div><div class="milestone-diamond"></div><div class="milestone-lane-label">${item.name}</div>`;
+                
+                // Vertical Line
+                const vLine = document.createElement('div');
+                vLine.className = 'date-line';
+                vLine.style.height = rowHeight + "px";
+                vLine.style.top = `-${vTop}px`; 
+                
+                const icon = (item.icon && iconMap[item.icon]) ? `<i class="fa-solid ${iconMap[item.icon].class}"></i> ` : '';
+                mEl.innerHTML = `<div class="milestone-diamond"></div><div class="milestone-lane-label">${icon}${item.name}</div>`;
+                mEl.appendChild(vLine);
                 area.appendChild(mEl);
             }
         });
-        row.style.minHeight = Math.max(120, (items.length * 65) + 40) + "px";
         row.appendChild(area); card.appendChild(row);
     });
     container.appendChild(card);
