@@ -1,7 +1,3 @@
-/**
- * Gantt Flow Logic
- */
-
 let staffInfo = {};
 let projects = [];
 let config = { startYear: 2026, startMonth: 1, endYear: 2027, endMonth: 2 }; 
@@ -67,8 +63,8 @@ function initTimelineRange() {
 
 function updateInitials() {
     getStaffSortedBySurname().forEach(([id, data]) => {
-        const nameParts = data.name.trim().split(/\s+/);
-        let base = (nameParts.length > 1) ? (nameParts[0][0] + nameParts[nameParts.length-1][0]) : nameParts[0].substring(0, 2);
+        const parts = data.name.trim().split(/\s+/);
+        let base = (parts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
     });
     if (staffInfo['TBC']) staffInfo['TBC'].displayInitials = 'TBC';
@@ -85,17 +81,17 @@ function sortProjects() {
     projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
 }
 
-// --- Persistence & Status ---
+// --- Persistence ---
 
 function loadData() {
-    const saved = localStorage.getItem('gantt_flow');
+    const saved = localStorage.getItem('gantt_flow_v25_final');
     if (saved) {
         const data = JSON.parse(saved);
         projects = data.projects || []; staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
     sortProjects(); assignColors(); initTimelineRange(); initFilters(); render();
-    updateStatusMessage("Flow Loaded - No Changes", false);
+    updateStatusMessage("Flow Loaded", false);
     hasChanges = false;
 }
 
@@ -105,7 +101,7 @@ function markModified() {
 }
 
 function persist() {
-    localStorage.setItem('gantt_flow', JSON.stringify({ config, staff: staffInfo, projects }));
+    localStorage.setItem('gantt_flow_v25_final', JSON.stringify({ config, staff: staffInfo, projects }));
     updateStatusMessage(`Flow Saved ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
     hasChanges = false;
 }
@@ -118,7 +114,7 @@ function updateStatusMessage(text, isWarning) {
     el.className = isWarning ? 'unsaved' : 'saved';
 }
 
-// --- Sidebar & UI ---
+// --- Sidebar ---
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
@@ -229,7 +225,7 @@ function editProject(pIdx) {
         <div class="goal-manager-section">
             <label><i class="fa-solid fa-bullseye"></i> Key Objectives</label>
             <div class="goal-input-group"><input type="text" id="new_goal_text" placeholder="Add goal..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})"><button class="btn-add" onclick="addGoal(${pIdx})"><i class="fa-solid fa-plus"></i></button></div>
-            <div class="goal-editor-list">${goalsHtml || '<div style="text-align:center; padding:10px; color:#94a3b8; font-size:13px;">No goals defined yet.</div>'}</div>
+            <div class="goal-editor-list">${goalsHtml || '<em>No goals set</em>'}</div>
         </div>
         <div style="display:flex; gap:10px; margin-top:20px; border-top:1px solid #eee; padding-top:15px;">
             <button class="btn btn-success" style="flex:1" onclick="addTask(${pIdx})">Add Task</button>
@@ -253,13 +249,13 @@ function manageStaff() {
     ss.forEach(([id, info]) => {
         html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editStaffMember('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteStaff('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
     });
-    openModal("Team Directory", "Manage roles", html + `</div>`);
+    openModal("Team Directory", "Team roles", html + `</div>`);
     const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button class="btn" onclick="closeModal()">Close</button>`;
+    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()">+ Add New Member</button><button class="btn" onclick="closeModal()">Close</button>`;
 }
 
-function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Create profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
-function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Update record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
+function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
+function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
 
 function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
@@ -273,7 +269,7 @@ function editTask(pIdx, tIdx) {
     const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
     const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
 
-    openModal("Edit Task", "Configure assignments", `
+    openModal("Edit Task", "Schedule", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
             <div class="form-group"><label>Start Month (1-12)</label><input type="number" step="0.1" id="e_start_m" value="${t.startMonth || 1}"></div>
@@ -341,8 +337,6 @@ function saveChanges() {
 
 function deleteStaff(id) { projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); })); delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageStaff(); }
 
-// --- IO ---
-
 function triggerImport() { document.getElementById('importFile').click(); }
 function handleFileImport(e) {
     const reader = new FileReader();
@@ -353,9 +347,7 @@ function handleFileImport(e) {
             if (data.config) config = data.config;
             assignColors(); initTimelineRange(); initFilters(); render(); persist();
             updateStatusMessage("Flow Loaded", false);
-        } catch (err) {
-            alert("Error parsing JSON.");
-        }
+        } catch (err) { alert("Error parsing JSON."); }
     };
     reader.readAsText(e.target.files[0]);
 }
@@ -365,7 +357,7 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
     hasChanges = false;
-    updateStatusMessage(`Exported ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
+    updateStatusMessage(`Exported ${new Date().toLocaleTimeString()}`, false);
 }
 
 // --- Render ---
@@ -416,7 +408,19 @@ function render() {
             const vTop = 20 + (laneIdx * 65); 
             if (item.type === 'task') {
                 const leadData = staffInfo[item.lead] || staffInfo['TBC'];
-                const supportNames = (item.support || []).map(s => staffInfo[s.staff]?.name.split(' ')[0] || '?');
+                
+                // NEW: Sort collaborators by surname
+                const supportIds = (item.support || []).map(s => s.staff);
+                const sortedSupportIds = supportIds.sort((a, b) => {
+                    const infoA = staffInfo[a];
+                    const infoB = staffInfo[b];
+                    if (!infoA || !infoB) return 0;
+                    const surnameA = infoA.name.trim().split(/\s+/).pop().toLowerCase();
+                    const surnameB = infoB.name.trim().split(/\s+/).pop().toLowerCase();
+                    return surnameA.localeCompare(surnameB);
+                });
+
+                const supportNames = sortedSupportIds.map(id => staffInfo[id]?.name.split(' ')[0] || '?');
                 const teamStr = `${leadData.name.split(' ')[0]}${supportNames.length ? ' + ' + supportNames.join(', ') : ''}`;
                 
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
@@ -428,7 +432,7 @@ function render() {
                 el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
                 
-                const badgesHtml = `<div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}"><div class="badge lead">${leadData.displayInitials}</div>${(item.support||[]).map(s => `<div class="badge support" style="background:${staffInfo[s.staff]?.color || '#64748b'}">${staffInfo[s.staff]?.displayInitials || '?'}</div>`).join('')}</div>`;
+                const badgesHtml = `<div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}"><div class="badge lead">${leadData.displayInitials}</div>${sortedSupportIds.map(id => `<div class="badge support" style="background:${staffInfo[id]?.color || '#64748b'}">${staffInfo[id]?.displayInitials || '?'}</div>`).join('')}</div>`;
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
                 
                 el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
