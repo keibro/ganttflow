@@ -75,7 +75,11 @@ function assignColors() {
     updateInitials();
 }
 
-// --- Persistence & Status ---
+function sortProjects() {
+    projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
+}
+
+// --- Persistence ---
 
 function loadData() {
     const saved = localStorage.getItem('gantt_flow_v25_final');
@@ -84,7 +88,7 @@ function loadData() {
         projects = data.projects || []; staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    assignColors(); initTimelineRange(); initFilters(); render();
+    sortProjects(); assignColors(); initTimelineRange(); initFilters(); render();
     updateStatusMessage("Flow Loaded - No Changes", false);
     hasChanges = false;
 }
@@ -102,11 +106,12 @@ function persist() {
 
 function updateStatusMessage(text, isWarning) {
     const el = document.getElementById('save-status');
+    if (!el) return;
     el.textContent = text;
     el.className = isWarning ? 'unsaved' : 'saved';
 }
 
-// --- Sidebar & Filter Logic ---
+// --- Sidebar ---
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
@@ -119,76 +124,41 @@ function setFilter(key) {
 
 function initFilters() {
     const container = document.getElementById('filter-list');
-    
-    // RE-ADDED: Unassigned filter button
     container.innerHTML = `
-        <button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')">
-            <i class="fa-solid fa-layer-group"></i> All Projects
-        </button>
-        <button class="filter-item" id="f-TBC" onclick="setFilter('TBC')">
-            <i class="fa-solid fa-user-slash"></i> Unassigned
-        </button>
+        <button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')"><i class="fa-solid fa-layer-group"></i> All Projects</button>
+        <button class="filter-item" id="f-TBC" onclick="setFilter('TBC')"><i class="fa-solid fa-user-slash"></i> Unassigned</button>
     `;
-    
     getStaffSortedBySurname().forEach(([key, info]) => {
         const btn = document.createElement('button');
         btn.className = 'filter-item'; btn.id = `f-${key}`;
-        btn.innerHTML = `
-            <div class="filter-color-dot" style="background:${info.color}"></div>
-            <div class="filter-info">
-                <strong>${info.name}</strong><br>
-                <small>${info.role}</small>
-            </div>`;
+        btn.innerHTML = `<div class="filter-color-dot" style="background:${info.color}"></div><div class="filter-info"><strong>${info.name}</strong><br><small>${info.role}</small></div>`;
         btn.onclick = () => setFilter(key);
         container.appendChild(btn);
     });
 }
 
-// --- Modal Management ---
+// --- Project Logic ---
 
-function openModal(title, subtitle, bodyHtml, onDelete) {
-    document.getElementById('modalTitle').textContent = title;
-    document.getElementById('modalSubtitle').textContent = subtitle;
-    document.getElementById('modalBody').innerHTML = bodyHtml;
-    const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-primary" onclick="saveChanges()">Save Details</button><button class="btn" onclick="closeModal()">Cancel</button>`;
-    if (onDelete) {
-        const del = document.createElement('button');
-        del.className = 'btn btn-danger'; del.innerHTML = '<i class="fa-solid fa-trash"></i> Delete'; del.onclick = onDelete;
-        footer.appendChild(del);
+function addProject() { 
+    // Create new project with a unique temporary ID for scrolling
+    const tempId = "new_" + Date.now();
+    const newProj = { name: 'Untitled Project', tasks: [], milestones: [], goals: [], _scrollId: tempId };
+    
+    projects.push(newProj);
+    setFilter('ALL'); // Reset filter so new project is visible
+    sortProjects();
+    markModified(); 
+    render(); 
+    persist(); 
+
+    // Find the row and scroll to it
+    const row = document.querySelector(`[data-project-id="${tempId}"]`);
+    if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Clean up the temp ID after scrolling
+        delete newProj._scrollId;
     }
-    document.getElementById('editorModal').style.display = 'flex';
 }
-
-function closeModal() { document.getElementById('editorModal').style.display = 'none'; editingContext = null; }
-
-function updateCollabPreview() {
-    const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked'))
-        .map(cb => staffInfo[cb.value]?.name || 'Unknown');
-    const container = document.getElementById('e_collab_preview');
-    if (!container) return;
-    container.innerHTML = selected.length ? selected.map(n => `<span class="collab-pill">${n}</span>`).join('') : '<span style="color:#94a3b8; font-style:italic; font-size:12px;">No collaborators selected</span>';
-}
-
-function filterCollabs(query) {
-    const q = query.toLowerCase();
-    document.querySelectorAll('.collaborator-item').forEach(item => {
-        const name = item.querySelector('strong').textContent.toLowerCase();
-        item.style.display = name.includes(q) ? 'flex' : 'none';
-    });
-}
-
-function toggleCollabCard(el, id) {
-    const checkbox = el.querySelector('input');
-    checkbox.checked = !checkbox.checked;
-    el.classList.toggle('selected', checkbox.checked);
-    updateCollabPreview();
-    markModified();
-}
-
-// --- Project & Goal Logic ---
-
-function addProject() { projects.push({ name: 'Untitled Project', tasks: [], milestones: [], goals: [] }); markModified(); render(); persist(); }
 
 function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
@@ -197,17 +167,14 @@ function editProject(pIdx) {
         <div class="goal-editor-row">
             <div class="goal-number">${i+1}</div>
             <input type="text" class="goal-edit-input" value="${g}" oninput="updateGoalText(${pIdx}, ${i}, this.value)" placeholder="Edit goal...">
-            <button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})" title="Remove"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})"><i class="fa-solid fa-trash"></i></button>
         </div>`).join('');
 
-    openModal("Project Settings", "Manage core objectives", `
+    openModal("Project Settings", "Manage info and objectives", `
         <div class="form-group"><label>Project Title</label><input type="text" id="e_title" value="${p.name}"></div>
         <div class="goal-manager-section">
             <label><i class="fa-solid fa-bullseye"></i> Objectives & Goals</label>
-            <div class="goal-input-group">
-                <input type="text" id="new_goal_text" placeholder="Add new goal..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})">
-                <button class="btn-add" onclick="addGoal(${pIdx})"><i class="fa-solid fa-plus"></i></button>
-            </div>
+            <div class="goal-input-group"><input type="text" id="new_goal_text" placeholder="Add new goal..." onkeypress="if(event.key==='Enter') addGoal(${pIdx})"><button class="btn-add" onclick="addGoal(${pIdx})"><i class="fa-solid fa-plus"></i></button></div>
             <div class="goal-editor-list">${goalsHtml || '<em>No goals set</em>'}</div>
         </div>
         <div style="display:flex; gap:10px; margin-top:24px; border-top:1px solid #eee; padding-top:20px;">
@@ -226,7 +193,49 @@ function addGoal(pIdx) {
 }
 function removeGoal(pIdx, gIdx) { projects[pIdx].goals.splice(gIdx, 1); markModified(); persist(); editProject(pIdx); }
 
-// --- Staff Management ---
+// --- Modal & Team UI ---
+
+function openModal(title, subtitle, bodyHtml, onDelete) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalSubtitle').textContent = subtitle;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    const footer = document.querySelector('.modal-footer');
+    footer.innerHTML = `<button class="btn btn-primary" onclick="saveChanges()">Save Details</button><button class="btn" onclick="closeModal()">Cancel</button>`;
+    if (onDelete) {
+        const del = document.createElement('button');
+        del.className = 'btn btn-danger'; del.innerHTML = '<i class="fa-solid fa-trash"></i> Delete'; del.onclick = onDelete;
+        footer.appendChild(del);
+    }
+    document.getElementById('editorModal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('editorModal').style.display = 'none'; editingContext = null; }
+
+function filterCollabs(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.collaborator-item').forEach(item => {
+        const name = item.querySelector('strong').textContent.toLowerCase();
+        item.style.display = name.includes(q) ? 'flex' : 'none';
+    });
+}
+
+function toggleCollabCard(el, id) {
+    const checkbox = el.querySelector('input');
+    checkbox.checked = !checkbox.checked;
+    el.classList.toggle('selected', checkbox.checked);
+    updateCollabPreview();
+    markModified();
+}
+
+function updateCollabPreview() {
+    const selected = Array.from(document.querySelectorAll('input[name="collab"]:checked'))
+        .map(cb => staffInfo[cb.value]?.name || 'Unknown');
+    const container = document.getElementById('e_collab_preview');
+    if (!container) return;
+    container.innerHTML = selected.length ? selected.map(n => `<span class="collab-pill">${n}</span>`).join('') : '<span style="color:#94a3b8; font-style:italic; font-size:12px;">No collaborators selected</span>';
+}
+
+// --- Team Management ---
 
 function manageStaff() {
     const ss = getStaffSortedBySurname();
@@ -279,7 +288,7 @@ function editMilestone(pIdx, mIdx) {
         <div class="form-grid"><div class="form-group full-width"><label>Title</label><input type="text" id="e_title" value="${m.name}"></div>
         <div class="form-group full-width"><label>Date <span id="e_month_preview" class="preview-badge">${getMonthPreview(m.month)}</span></label><input type="number" step="0.1" id="e_month" value="${m.month}"></div>
         <div class="form-group full-width"><label>Icon</label><div class="icon-selector">${iconHtml}</div><input type="hidden" id="e_icon" value="${m.icon || 'none'}"></div></div>`, 
-        () => { projects[pIdx].milestones.splice(mIdx,1); closeModal(); render(); persist(); });
+        () => { projects[pIdx].milestones.splice(mIdx,1); markModified(); closeModal(); render(); persist(); });
     document.getElementById('e_month').oninput = () => { document.getElementById('e_month_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_month').value)); markModified(); };
 }
 
@@ -312,8 +321,6 @@ function saveChanges() {
 
 function deleteStaff(id) { projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); })); delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageStaff(); }
 
-// --- IO ---
-
 function triggerImport() { document.getElementById('importFile').click(); }
 function handleFileImport(e) {
     const reader = new FileReader();
@@ -330,10 +337,11 @@ function exportData() {
     const blob = new Blob([JSON.stringify({ config, staff: staffInfo, projects }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "roadmap.json"; a.click();
+    hasChanges = false;
     updateStatusMessage(`Exported ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - No changes`, false);
 }
 
-// --- Render ---
+// --- Render Engine ---
 
 function render() {
     const container = document.getElementById('timeline');
@@ -360,7 +368,12 @@ function render() {
 
         const rowHeight = Math.max(120, (items.length * 65) + 40);
         const row = document.createElement('div');
-        row.className = 'timeline-row'; row.style.gridTemplateColumns = `var(--project-col-width) 1fr`; row.style.minHeight = rowHeight + "px";
+        row.className = 'timeline-row'; 
+        row.style.gridTemplateColumns = `var(--project-col-width) 1fr`; 
+        row.style.minHeight = rowHeight + "px";
+        
+        // Add ID if project is newly created
+        if (p._scrollId) row.setAttribute('data-project-id', p._scrollId);
 
         const side = document.createElement('div');
         side.className = 'project-sidebar';
