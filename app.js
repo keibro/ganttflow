@@ -71,6 +71,7 @@ function updateInitials() {
         let base = (parts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
     });
+    // Explicitly set TBC initials
     if (staffInfo['TBC']) staffInfo['TBC'].displayInitials = 'TBC';
 }
 
@@ -78,8 +79,15 @@ function assignColors() {
     getStaffSortedBySurname().forEach(([id], index) => { 
         staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
     });
-    if (!staffInfo['TBC']) staffInfo['TBC'] = { name: 'Unassigned', role: 'No lead', color: '#64748b' };
+    
+    // RECTIFIED: Always ensure TBC exists and has its specific color
+    if (!staffInfo['TBC']) {
+        staffInfo['TBC'] = { name: 'Unassigned', role: 'Pending' };
+    }
+    staffInfo['TBC'].color = '#64748b'; 
 }
+
+
 
 function sortProjects() {
     projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
@@ -94,7 +102,12 @@ function loadData() {
         projects = data.projects || []; staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    sortProjects(); assignColors(); initTimelineRange(); initFilters(); render();
+    sortProjects(); 
+    assignColors(); 
+    updateInitials(); // Added to ensure initials generate on load
+    initTimelineRange(); 
+    initFilters(); 
+    render();
     updateStatusMessage("Flow Loaded - No Changes", false);
     hasChanges = false;
 }
@@ -421,7 +434,7 @@ function render() {
     const header = document.createElement('div');
     header.className = 'timeline-header';
     header.style.gridTemplateColumns = `var(--project-col-width) repeat(${totalCols}, 1fr)`;
-    header.innerHTML = `<div>Project Name & Goals</div>` + timelineMonths.map(m => `<div>${m.label}</div>`).join('');
+    header.innerHTML = `<div>Project</div>` + timelineMonths.map(m => `<div>${m.label}</div>`).join('');
     card.appendChild(header);
 
     projects.forEach((p, pIdx) => {
