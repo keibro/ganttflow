@@ -76,17 +76,19 @@ function updateInitials() {
 }
 
 function assignColors() {
+    // 1. Force-inject TBC into the staffInfo object so it's never missing
+    staffInfo['TBC'] = { 
+        name: 'Unassigned', 
+        role: 'Pending', 
+        displayInitials: 'TBC', 
+        color: '#64748b' 
+    };
+
+    // 2. Assign colors to everyone else
     getStaffSortedBySurname().forEach(([id], index) => { 
         staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
     });
-    
-    // RECTIFIED: Always ensure TBC exists and has its specific color
-    if (!staffInfo['TBC']) {
-        staffInfo['TBC'] = { name: 'Unassigned', role: 'Pending' };
-    }
-    staffInfo['TBC'].color = '#64748b'; 
 }
-
 
 
 function sortProjects() {
@@ -99,18 +101,22 @@ function loadData() {
     const saved = localStorage.getItem('gantt_flow');
     if (saved) {
         const data = JSON.parse(saved);
-        projects = data.projects || []; staffInfo = data.staff || {};
+        projects = data.projects || []; 
+        staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    sortProjects(); 
+    
     assignColors(); 
-    updateInitials(); // Added to ensure initials generate on load
+    updateInitials(); 
+    
+    sortProjects(); 
     initTimelineRange(); 
     initFilters(); 
     render();
     updateStatusMessage("Flow Loaded - No Changes", false);
     hasChanges = false;
 }
+
 
 function markModified() {
     hasChanges = true;
@@ -390,27 +396,61 @@ function handleFileImport(e) {
     reader.onload = (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            projects = data.projects || []; staffInfo = data.staff || {};
+            
+            // 1. Load raw data
+            projects = data.projects || []; 
+            staffInfo = data.staff || {};
             if (data.config) config = data.config;
-            assignColors(); initTimelineRange(); initFilters(); render(); persist();
-            updateStatusMessage("Flow Loaded - No Changes", false);
-        } catch (err) { alert("Error parsing JSON."); }
+
+            // 2. CRITICAL: Run the initialization sequence to generate 
+            // the properties missing from the clean JSON
+            assignColors();     // Injects TBC and sets colors
+            updateInitials();   // Generates displayInitials (The fix for your error)
+            sortProjects();     // Sorts A-Z
+            
+            // 3. Refresh UI components
+            initTimelineRange(); 
+            initFilters(); 
+            render(); 
+            
+            // 4. Save to LocalStorage so a refresh keeps the new data
+            persist();
+
+            updateStatusMessage("Flow Imported Successfully", false);
+        } catch (err) { 
+            console.error(err);
+            alert("Error parsing JSON."); 
+        }
     };
     reader.readAsText(e.target.files[0]);
 }
 
 function exportData() {
-    const blob = new Blob([JSON.stringify({ config, staff: staffInfo, projects }, null, 2)], { type: "application/json" });
+    // 1. Create a deep copy of staff and projects to avoid breaking the live UI
+    const staffCopy = JSON.parse(JSON.stringify(staffInfo));
+    const projectsCopy = JSON.parse(JSON.stringify(projects));
+
+    // 2. Remove TBC (since it's now hardcoded in the app)
+    delete staffCopy['TBC'];
+
+    // 3. Strip calculated/UI-only properties from every staff member
+    Object.keys(staffCopy).forEach(id => {
+        delete staffCopy[id].color;
+        delete staffCopy[id].displayInitials;
+    });
+
+    // 4. Construct the clean data object
+    const exportObj = {
+        config,
+        staff: staffCopy,
+        projects: projectsCopy
+    };
+
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
 
-    // NEW DYNAMIC TIMESTAMP LOGIC
     const now = new Date();
-    const year = now.getFullYear();
-    const month = monthNames[now.getMonth()];
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const timestamp = `${year}_${month}_${day}_${hours}${minutes}`;
+    const timestamp = `${now.getFullYear()}_${monthNames[now.getMonth()]}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
     const a = document.createElement("a");
     a.href = url;
@@ -418,7 +458,7 @@ function exportData() {
     a.click();
 
     hasChanges = false;
-    updateStatusMessage(`Exported ${new Date().toLocaleTimeString()}`, false);
+    updateStatusMessage(`Exported Clean JSON ${new Date().toLocaleTimeString()}`, false);
 }
 
 // --- Render Engine ---
