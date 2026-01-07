@@ -45,6 +45,7 @@ function getStaffSortedBySurname() {
     return Object.entries(staffInfo)
         .filter(([id]) => id !== 'TBC')
         .sort((a, b) => {
+            if (a[1].isOrg !== b[1].isOrg) return a[1].isOrg ? -1 : 1;
             const nameA = a[1].name.trim().split(/\s+/);
             const nameB = b[1].name.trim().split(/\s+/);
             const surnameA = nameA[nameA.length - 1].toLowerCase();
@@ -66,23 +67,31 @@ function initTimelineRange() {
 }
 
 function updateInitials() {
-    getStaffSortedBySurname().forEach(([id, data]) => {
-        const parts = data.name.trim().split(/\s+/);
-        let base = (parts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
-        staffInfo[id].displayInitials = base.toUpperCase();
+    Object.entries(staffInfo).forEach(([id, data]) => {
+        if (id === 'TBC') { data.displayInitials = 'TBC'; return; }
+        if (data.isOrg) {
+            // RECTIFIED: Improved abbreviation logic
+            const acronym = data.name.match(/[A-Z]/g);
+            if (acronym && acronym.length > 1) {
+                data.displayInitials = acronym.join('').substring(0, 4);
+            } else {
+                // If single word or no capitals, take first three letters
+                data.displayInitials = data.name.substring(0, 3);
+            }
+        } else {
+            const parts = data.name.trim().split(/\s+/);
+            data.displayInitials = (parts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
+        }
+        data.displayInitials = data.displayInitials.toUpperCase();
     });
-    if (staffInfo['TBC']) staffInfo['TBC'].displayInitials = 'TBC';
 }
 
 function assignColors() {
-    staffInfo['TBC'] = { 
-        name: 'Unassigned', 
-        role: 'Pending', 
-        displayInitials: 'TBC', 
-        color: '#64748b' 
-    };
+    staffInfo['TBC'] = { name: 'Unassigned', role: 'Pending', displayInitials: 'TBC', color: '#64748b', isOrg: false };
     getStaffSortedBySurname().forEach(([id], index) => { 
-        staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
+        if (!staffInfo[id].color) {
+            staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
+        }
     });
 }
 
@@ -100,12 +109,8 @@ function loadData() {
         staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    assignColors(); 
-    updateInitials(); 
-    sortProjects(); 
-    initTimelineRange(); 
-    initFilters(); 
-    render();
+    assignColors(); updateInitials(); sortProjects(); 
+    initTimelineRange(); initFilters(); render();
     hasChanges = false;
     updateStatusMessage("Workspace Ready", false);
 }
@@ -118,19 +123,14 @@ function markModified() {
 function persist() {
     localStorage.setItem('gantt_flow', JSON.stringify({ config, staff: staffInfo, projects }));
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    if (hasChanges) {
-        updateStatusMessage(`Auto-saved to Browser (${time}) - Export Required`, true);
-    } else {
-        updateStatusMessage(`Workspace Ready (${time})`, false);
-    }
+    if (hasChanges) { updateStatusMessage(`Auto-saved (${time}) - Export Required`, true); } 
+    else { updateStatusMessage(`Workspace Ready (${time})`, false); }
 }
 
 function updateStatusMessage(text, isWarning) {
     const el = document.getElementById('save-status');
     if (!el) return;
-    const icon = isWarning 
-        ? '<i class="fa-solid fa-file-export fa-fade"></i>' 
-        : '<i class="fa-solid fa-circle-check"></i>';      
+    const icon = isWarning ? '<i class="fa-solid fa-file-export fa-fade"></i>' : '<i class="fa-solid fa-circle-check"></i>';      
     el.innerHTML = `${icon} <span>${text}</span>`;
     el.className = isWarning ? 'unsaved' : 'saved';
 }
@@ -152,13 +152,28 @@ function initFilters() {
         <button class="filter-item active" id="f-ALL" onclick="setFilter('ALL')"><i class="fa-solid fa-layer-group"></i> All Projects</button>
         <button class="filter-item" id="f-TBC" onclick="setFilter('TBC')"><i class="fa-solid fa-user-slash"></i> Unassigned</button>
     `;
-    getStaffSortedBySurname().forEach(([key, info]) => {
-        const btn = document.createElement('button');
-        btn.className = 'filter-item'; btn.id = `f-${key}`;
-        btn.innerHTML = `<div class="filter-color-dot" style="background:${info.color}"></div><div class="filter-info"><strong>${info.name}</strong><br><small>${info.role}</small></div>`;
-        btn.onclick = () => setFilter(key);
-        container.appendChild(btn);
-    });
+
+    const sorted = getStaffSortedBySurname();
+    
+    if (sorted.some(s => s[1].isOrg)) {
+        const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Organisations';
+        container.appendChild(h);
+        sorted.filter(s => s[1].isOrg).forEach(([key, info]) => appendFilterBtn(container, key, info));
+    }
+
+    if (sorted.some(s => !s[1].isOrg)) {
+        const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Staff Members';
+        container.appendChild(h);
+        sorted.filter(s => !s[1].isOrg).forEach(([key, info]) => appendFilterBtn(container, key, info));
+    }
+}
+
+function appendFilterBtn(container, key, info) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-item'; btn.id = `f-${key}`;
+    btn.innerHTML = `<div class="filter-color-dot" style="background:${info.color}; border-radius:${info.isOrg?'2px':'50%'}"></div><div class="filter-info"><strong>${info.name}</strong><small>${info.role || ''}</small></div>`;
+    btn.onclick = () => setFilter(key);
+    container.appendChild(btn);
 }
 
 function configureTimeline() {
@@ -277,19 +292,48 @@ function addGoal(pIdx) {
 }
 function removeGoal(pIdx, gIdx) { projects[pIdx].goals.splice(gIdx, 1); markModified(); persist(); editProject(pIdx); }
 
-function manageStaff() {
+function manageRegistry() {
     const ss = getStaffSortedBySurname();
-    let html = `<div class="staff-manager-container"><div class="staff-list-header"><div></div><div>Member Info</div><div style="text-align:right">Options</div></div>`;
+    let html = `<div class="staff-manager-container"><div class="staff-list-header"><div></div><div>Registry Name / Description</div><div style="text-align:right">Options</div></div>`;
     ss.forEach(([id, info]) => {
-        html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editStaffMember('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteStaff('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
+        html += `<div class="staff-row"><div class="staff-avatar ${info.isOrg?'':'is-staff'}" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editAssignee('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteAssignee('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
     });
-    openModal("Team Directory", "Team roles", html + `</div>`);
+    openModal("Registry Directory", "Staff and Organisations", html + `</div>`);
     const footer = document.querySelector('.modal-footer');
-    footer.innerHTML = `<button class="btn btn-primary" onclick="addNewStaff()">+ Add New Member</button><button class="btn" onclick="closeModal()">Close</button>`;
+    footer.innerHTML = `
+        <button class="btn btn-primary" onclick="addAssignee(false)">+ Add Staff</button>
+        <button class="btn btn-accent" onclick="addAssignee(true)">+ Add Organisation</button>
+        <button class="btn" onclick="closeModal()">Close</button>`;
 }
 
-function addNewStaff() { editingContext = { type: 'staff-edit', isNew: true }; openModal("Add Member", "Create profile", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role"></div></div>`); }
-function editStaffMember(id) { const s = staffInfo[id]; editingContext = { type: 'staff-edit', isNew: false, targetId: id }; openModal("Edit Profile", "Update record", `<div class="form-grid"><div class="form-group full-width"><label>Name</label><input type="text" id="s_name" value="${s.name}"></div><div class="form-group full-width"><label>Role</label><input type="text" id="s_role" value="${s.role}"></div></div>`); }
+function addAssignee(isOrg) { 
+    editingContext = { type: 'registry-edit', isNew: true, isOrg }; 
+    const title = isOrg ? "Add Organisation" : "Add Staff Member";
+    const label = isOrg ? "Organisation Full Name" : "Staff Name";
+    const descLabel = isOrg ? "Short Description (for sidebar)" : "Role / Title";
+    openModal(title, "Create record", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>${label}</label><input type="text" id="s_name"></div>
+            <div class="form-group full-width"><label>${descLabel}</label><input type="text" id="s_role"></div>
+        </div>`); 
+}
+
+function editAssignee(id) { 
+    const s = staffInfo[id]; 
+    editingContext = { type: 'registry-edit', isNew: false, targetId: id, isOrg: s.isOrg }; 
+    const label = s.isOrg ? "Organisation Full Name" : "Staff Name";
+    openModal("Edit Profile", "Update record", `
+        <div class="form-grid">
+            <div class="form-group full-width"><label>${label}</label><input type="text" id="s_name" value="${s.name}"></div>
+            <div class="form-group full-width"><label>Description / Role</label><input type="text" id="s_role" value="${s.role}"></div>
+        </div>`); 
+}
+
+function deleteAssignee(id) {
+    if(!confirm("Are you sure? This will unassign this entity from all tasks.")) return;
+    projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); }));
+    delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageRegistry();
+}
 
 function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
@@ -297,7 +341,7 @@ function editTask(pIdx, tIdx) {
     const sorted = getStaffSortedBySurname();
     const collabCards = sorted.map(([k, v]) => {
         const isChecked = t.support?.some(s => s.staff === k);
-        return `<div class="collaborator-item ${isChecked ? 'selected' : ''}" onclick="toggleCollabCard(this, '${k}')"><input type="checkbox" name="collab" value="${k}" ${isChecked ? 'checked' : ''}><div class="collab-avatar" style="background:${v.color}">${v.displayInitials}</div><div class="collab-info"><strong>${v.name}</strong><span>${v.role}</span></div></div>`;
+        return `<div class="collaborator-item ${v.isOrg?'is-org':''} ${isChecked ? 'selected' : ''}" onclick="toggleCollabCard(this, '${k}')"><input type="checkbox" name="collab" value="${k}" ${isChecked ? 'checked' : ''}><div class="collab-avatar ${v.isOrg?'':'is-staff'}" style="background:${v.color}">${v.displayInitials}</div><div class="collab-info"><strong>${v.name}</strong><span>${v.role}</span></div></div>`;
     }).join('');
     const leadOptions = [['TBC', staffInfo['TBC']], ...sorted].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
     const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
@@ -314,8 +358,8 @@ function editTask(pIdx, tIdx) {
                 <input type="number" step="0.1" id="e_end_m" value="${t.endMonth || 2}">
             </div>
             <div class="form-group"><label>End Year</label><select id="e_end_y">${yearOptions}</select></div>
-            <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
-            <div class="form-group full-width"><label>Team</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search team..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${collabCards}</div></div>
+            <div class="form-group full-width"><label>Lead (Staff or Org)</label><select id="e_lead">${leadOptions}</select></div>
+            <div class="form-group full-width"><label>Collaborators</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search registry..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${collabCards}</div></div>
         </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); markModified(); closeModal(); render(); persist(); });
     document.getElementById('e_start_y').value = t.startYear || config.startYear;
     document.getElementById('e_end_y').value = t.endYear || config.startYear;
@@ -370,10 +414,14 @@ function saveChanges() {
         initTimelineRange(); render(); persist(); closeModal();
         return;
     }
-    if (ctx.type === 'staff-edit') {
+    if (ctx.type === 'registry-edit') {
         const id = ctx.isNew ? "id_" + Date.now() : ctx.targetId;
-        staffInfo[id] = { name: document.getElementById('s_name').value, role: document.getElementById('s_role').value };
-        markModified(); assignColors(); initFilters(); render(); persist(); closeModal(); manageStaff();
+        staffInfo[id] = { 
+            name: document.getElementById('s_name').value, 
+            role: document.getElementById('s_role').value,
+            isOrg: ctx.isOrg
+        };
+        markModified(); assignColors(); updateInitials(); initFilters(); render(); persist(); closeModal(); manageRegistry();
         return;
     }
     if (ctx.type === 'project') projects[ctx.pIdx].name = document.getElementById('e_title').value;
@@ -387,8 +435,6 @@ function saveChanges() {
     }
     markModified(); closeModal(); render(); persist();
 }
-
-function deleteStaff(id) { projects.forEach(p => p.tasks.forEach(t => { if(t.lead === id) t.lead = 'TBC'; t.support = t.support.filter(s => s.staff !== id); })); delete staffInfo[id]; markModified(); assignColors(); initFilters(); render(); persist(); manageStaff(); }
 
 // --- IO ---
 
@@ -494,24 +540,28 @@ function render() {
                     return infoA.name.trim().split(/\s+/).pop().toLowerCase().localeCompare(infoB.name.trim().split(/\s+/).pop().toLowerCase());
                 });
 
-                const supportNames = sortedSupportIds.map(id => staffInfo[id]?.name.split(' ')[0] || '?');
-                const teamStr = `${leadData.name.split(' ')[0]}${supportNames.length ? ' + ' + supportNames.join(', ') : ''}`;
-                
+                const teamNames = [leadData.name, ...sortedSupportIds.map(id => staffInfo[id]?.name || 'Unknown')];
+                const teamStr = teamNames.join(', ');
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
-                
-                // ADJUSTED: Increased multiplier to 10.5 to push labels out much earlier
                 const textLength = Math.max(item.name.length, teamStr.length);
-                const badgeWidth = 28 + (supportNames.length * 24) + 20;
+                const badgeWidth = 28 + (sortedSupportIds.length * 24) + 20;
                 const requiredWidthInside = badgeWidth + (textLength * 10.5) + 30;
-
                 const labelOutside = barWidthPx < requiredWidthInside;
 
                 const el = document.createElement('div');
                 el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
                 
-                const badgesHtml = `<div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}"><div class="badge lead">${leadData.displayInitials}</div>${sortedSupportIds.map(id => `<div class="badge support" style="background:${staffInfo[id]?.color || '#64748b'}">${staffInfo[id]?.displayInitials || '?'}</div>`).join('')}</div>`;
+                const badgesHtml = `
+                    <div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}">
+                        <div class="badge lead ${leadData.isOrg?'org':''}">${leadData.displayInitials}</div>
+                        ${sortedSupportIds.map(id => {
+                            const sInfo = staffInfo[id];
+                            return `<div class="badge support ${sInfo?.isOrg?'org':''}" style="background:${sInfo?.color || '#64748b'}">${sInfo?.displayInitials || '?'}</div>`;
+                        }).join('')}
+                    </div>`;
+
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
                 el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
                 area.appendChild(el);
