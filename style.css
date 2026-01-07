@@ -62,6 +62,7 @@ body {
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn-toggle { background: #1e293b; color: white; border: none; padding: 10px; margin-right: 12px; }
+.btn-sm { padding: 6px 10px; font-size: 11px; }
 
 .timeline-container { flex: 1; overflow: auto; background: var(--bg-main); position: relative; scroll-behavior: smooth; }
 .timeline-card { display: table; background: var(--bg-card); min-width: 100%; border-right: 1px solid var(--grid-border); }
@@ -81,14 +82,39 @@ body {
 .data-area { position: relative; background-image: linear-gradient(to right, var(--grid-border) 1px, transparent 1px); }
 
 .task-item { position: absolute; height: 48px; display: flex; align-items: center; z-index: 10; cursor: pointer; }
-.task-bar { height: 100%; width: 100%; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; gap: 12px; }
+.task-bar { height: 100%; width: 100%; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; gap: 12px; overflow: visible; }
 .task-bar.tbc-warning { border: 2px dashed #ef4444 !important; animation: tbc-pulse 2s infinite; }
-.task-label { display: flex; flex-direction: column; justify-content: center; line-height: 1.25; pointer-events: none; }
+
+.task-label { display: flex; flex-direction: column; justify-content: center; line-height: 1.2; pointer-events: none; }
 .task-name-text { font-size: 13px; font-weight: 700; white-space: nowrap; }
-.task-team-text { font-size: 11px; font-weight: 500; opacity: 0.9; white-space: nowrap; }
-.label-inside { color: #fff; }
-.label-inside .task-team-text { color: rgba(255,255,255,0.8); }
-.label-outside { color: #0f172a; position: absolute; left: calc(100% + 12px); background: white; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--grid-border); box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 20; }
+.task-team-text { font-size: 11px; font-weight: 500; white-space: nowrap; }
+
+
+.label-inside .task-name-text, 
+.label-inside .task-team-text { 
+    color: #ffffff; 
+    /* Multi-layered shadow creates a high-contrast silhouette */
+    text-shadow: 
+        0px 0px 4px rgba(0,0,0,1),
+        0px 0px 2px rgba(0,0,0,1),
+        1px 1px 1px rgba(0,0,0,0.8);
+}
+.label-inside .task-team-text { opacity: 0.95; }
+
+.label-outside { 
+    position: absolute; 
+    left: calc(100% + 10px); 
+    background: #ffffff; 
+    padding: 4px 12px; 
+    border-radius: 6px; 
+    border: 1px solid #cbd5e1; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15); 
+    z-index: 60; 
+    width: max-content;
+}
+
+.label-outside .task-name-text { color: #0f172a !important; text-shadow: none; }
+.label-outside .task-team-text { color: #475569 !important; opacity: 1; text-shadow: none; }
 
 .badge-group { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .badge { color: #fff; font-size: 10px; font-weight: 900; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.4); flex-shrink: 0; }
@@ -156,3 +182,46 @@ body {
 .icon-btn.active { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
 
 @keyframes tbc-pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+/* --- Printing Logic --- */
+@media print {
+    @page {
+        size: landscape;
+        margin: 10mm;
+    }
+    #sidebar, .top-nav, .modal-overlay, .btn, .action-divider, #save-status, .btn-sm {
+        display: none !important;
+    }
+    body, #main-wrapper, .timeline-container {
+        overflow: visible !important;
+        height: auto !important;
+        background: white !important;
+    }
+    .timeline-card {
+        border: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
+    }
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .project-sidebar, .timeline-header div:first-child {
+        position: static !important;
+        border-right: 1px solid #eee !important;
+    }
+    .timeline-header {
+        position: static !important;
+    }
+    body.print-single-mode .timeline-row {
+        display: none !important;
+    }
+    body.print-single-mode .timeline-row.printing-target {
+        display: grid !important;
+        border: none !important;
+    }
+    /* Ensure the halo prints clearly */
+    .label-inside .task-name-text {
+        text-shadow: 1px 1px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000 !important;
+    }
+}

@@ -71,25 +71,20 @@ function updateInitials() {
         let base = (parts.length > 1) ? (parts[0][0] + parts[parts.length-1][0]) : parts[0].substring(0, 2);
         staffInfo[id].displayInitials = base.toUpperCase();
     });
-    // Explicitly set TBC initials
     if (staffInfo['TBC']) staffInfo['TBC'].displayInitials = 'TBC';
 }
 
 function assignColors() {
-    // 1. Force-inject TBC into the staffInfo object so it's never missing
     staffInfo['TBC'] = { 
         name: 'Unassigned', 
         role: 'Pending', 
         displayInitials: 'TBC', 
         color: '#64748b' 
     };
-
-    // 2. Assign colors to everyone else
     getStaffSortedBySurname().forEach(([id], index) => { 
         staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
     });
 }
-
 
 function sortProjects() {
     projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
@@ -105,20 +100,15 @@ function loadData() {
         staffInfo = data.staff || {};
         if (data.config) config = data.config;
     }
-    
-    // Setup data
     assignColors(); 
     updateInitials(); 
     sortProjects(); 
     initTimelineRange(); 
     initFilters(); 
     render();
-
-    // Reset status: On load, we assume the browser matches the last session
     hasChanges = false;
     updateStatusMessage("Workspace Ready", false);
 }
-
 
 function markModified() {
     hasChanges = true;
@@ -128,8 +118,6 @@ function markModified() {
 function persist() {
     localStorage.setItem('gantt_flow', JSON.stringify({ config, staff: staffInfo, projects }));
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    
-    // Even though it's saved to browser, keep warning if not exported to file
     if (hasChanges) {
         updateStatusMessage(`Auto-saved to Browser (${time}) - Export Required`, true);
     } else {
@@ -140,16 +128,12 @@ function persist() {
 function updateStatusMessage(text, isWarning) {
     const el = document.getElementById('save-status');
     if (!el) return;
-    
-    // Change icons to reflect the actual action needed
     const icon = isWarning 
-        ? '<i class="fa-solid fa-file-export fa-fade"></i>' // Pulse icon for export
-        : '<i class="fa-solid fa-circle-check"></i>';      // Check for synced
-        
+        ? '<i class="fa-solid fa-file-export fa-fade"></i>' 
+        : '<i class="fa-solid fa-circle-check"></i>';      
     el.innerHTML = `${icon} <span>${text}</span>`;
     el.className = isWarning ? 'unsaved' : 'saved';
 }
-
 
 // --- Sidebar & Filter Logic ---
 
@@ -182,7 +166,6 @@ function configureTimeline() {
     const monthOptions = monthNames.map((m, i) => `<option value="${i+1}">${m}</option>`).join('');
     const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
     const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
-
     openModal("Timeline Settings", "Reconfigure chart view period", `
         <div class="form-grid">
             <div class="form-group"><label>Start Month</label><select id="conf_startMonth">${monthOptions}</select></div>
@@ -246,6 +229,19 @@ window.selectIcon = function(el, key) {
 
 // --- Actions ---
 
+function printProject(pIdx) {
+    const rows = document.querySelectorAll('.timeline-row');
+    const targetRow = rows[pIdx];
+    if (!targetRow) return;
+    document.body.classList.add('print-single-mode');
+    targetRow.classList.add('printing-target');
+    window.print();
+    setTimeout(() => {
+        document.body.classList.remove('print-single-mode');
+        targetRow.classList.remove('printing-target');
+    }, 500);
+}
+
 function addProject() { 
     const tempId = "new_" + Date.now();
     projects.push({ name: 'Untitled Project', tasks: [], milestones: [], goals: [], _scrollId: tempId });
@@ -258,7 +254,6 @@ function editProject(pIdx) {
     editingContext = { type: 'project', pIdx };
     const p = projects[pIdx];
     const goalsHtml = (p.goals || []).map((g, i) => `<div class="goal-editor-row"><div class="goal-number">${i+1}</div><input type="text" class="goal-edit-input" value="${g}" oninput="updateGoalText(${pIdx}, ${i}, this.value)" placeholder="Edit goal..."><button class="btn-goal-remove" onclick="removeGoal(${pIdx}, ${i})"><i class="fa-solid fa-trash"></i></button></div>`).join('');
-
     openModal("Project Settings", "Manage objectives", `
         <div class="form-group"><label>Project Title</label><input type="text" id="e_title" value="${p.name}"></div>
         <div class="goal-manager-section">
@@ -306,7 +301,6 @@ function editTask(pIdx, tIdx) {
     }).join('');
     const leadOptions = [['TBC', staffInfo['TBC']], ...sorted].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
     const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
-
     openModal("Edit Task", "Configure assignments", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Name</label><input type="text" id="e_title" value="${t.name}"></div>
@@ -323,11 +317,9 @@ function editTask(pIdx, tIdx) {
             <div class="form-group full-width"><label>Lead</label><select id="e_lead">${leadOptions}</select></div>
             <div class="form-group full-width"><label>Team</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search team..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${collabCards}</div></div>
         </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); markModified(); closeModal(); render(); persist(); });
-    
     document.getElementById('e_start_y').value = t.startYear || config.startYear;
     document.getElementById('e_end_y').value = t.endYear || config.startYear;
     updateCollabPreview();
-
     const updatePreview = () => {
         document.getElementById('e_start_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_start_m').value), document.getElementById('e_start_y').value);
         document.getElementById('e_end_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_end_m').value), document.getElementById('e_end_y').value);
@@ -342,7 +334,6 @@ function editMilestone(pIdx, mIdx) {
     const m = projects[pIdx].milestones[mIdx];
     const iconHtml = Object.entries(iconMap).map(([k,v]) => `<div class="icon-btn ${m.icon === k ? 'active' : ''}" onclick="window.selectIcon(this, '${k}')"><i class="fa-solid ${v.class}"></i><span>${v.label}</span></div>`).join('');
     const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
-
     openModal("Edit Milestone", "Timing", `
         <div class="form-grid">
             <div class="form-group full-width"><label>Title</label><input type="text" id="e_title" value="${m.name}"></div>
@@ -358,7 +349,6 @@ function editMilestone(pIdx, mIdx) {
             </div>
         </div>`, () => { projects[pIdx].milestones.splice(mIdx,1); markModified(); closeModal(); render(); persist(); });
     document.getElementById('e_y').value = m.year || config.startYear;
-
     const updatePreview = () => {
         document.getElementById('e_m_preview').textContent = getMonthPreview(parseFloat(document.getElementById('e_m').value), document.getElementById('e_y').value);
         markModified();
@@ -369,8 +359,6 @@ function editMilestone(pIdx, mIdx) {
 
 function addTask(pIdx) { projects[pIdx].tasks.push({ name: 'New Task', startMonth: config.startMonth, startYear: config.startYear, endMonth: config.startMonth+1, endYear: config.startYear, lead: 'TBC', support: [] }); markModified(); closeModal(); render(); persist(); }
 function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone', month: config.startMonth, year: config.startYear, icon: 'none' }); markModified(); closeModal(); render(); persist(); }
-
-// --- Global Save ---
 
 function saveChanges() {
     const ctx = editingContext;
@@ -412,12 +400,9 @@ function handleFileImport(e) {
             const data = JSON.parse(ev.target.result);
             projects = data.projects || []; staffInfo = data.staff || {};
             if (data.config) config = data.config;
-
             assignColors(); updateInitials(); sortProjects(); 
             initTimelineRange(); initFilters(); render(); 
             persist(); 
-
-            // After import, the state is "clean"
             hasChanges = false;
             updateStatusMessage("JSON File Loaded", false);
         } catch (err) { alert("Error parsing JSON."); }
@@ -428,26 +413,20 @@ function handleFileImport(e) {
 function exportData() {
     const staffCopy = JSON.parse(JSON.stringify(staffInfo));
     const projectsCopy = JSON.parse(JSON.stringify(projects));
-
     delete staffCopy['TBC'];
     Object.keys(staffCopy).forEach(id => {
         delete staffCopy[id].color;
         delete staffCopy[id].displayInitials;
     });
-
     const exportObj = { config, staff: staffCopy, projects: projectsCopy };
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-
     const now = new Date();
     const timestamp = `${now.getFullYear()}_${monthNames[now.getMonth()]}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-
     const a = document.createElement("a");
     a.href = url;
     a.download = `roadmap_${timestamp}.json`;
     a.click();
-
-    // RECTIFIED: The file is now the source of truth
     hasChanges = false;
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     updateStatusMessage(`JSON Exported (${time})`, false);
@@ -488,7 +467,14 @@ function render() {
         const side = document.createElement('div');
         side.className = 'project-sidebar';
         const gHtml = (p.goals || []).map(g => `<div class="goal-item-sidebar"><i class="fa-solid fa-check-double"></i><span>${g}</span></div>`).join('');
-        side.innerHTML = `<h4>${p.name}</h4>${p.goals?.length ? `<div class="project-goals-list">${gHtml}</div>` : ''}<button class="btn btn-sm" style="margin-top:15px; width:100%" onclick="editProject(${pIdx})"><i class="fa-solid fa-gear"></i> Manage</button>`;
+        side.innerHTML = `
+            <h4>${p.name}</h4>
+            ${p.goals?.length ? `<div class="project-goals-list">${gHtml}</div>` : ''}
+            <div style="display:flex; gap:5px; margin-top:15px;">
+                <button class="btn btn-sm" style="flex:1" onclick="editProject(${pIdx})"><i class="fa-solid fa-gear"></i> Manage</button>
+                <button class="btn btn-sm" style="width:40px" title="Print Project" onclick="printProject(${pIdx})"><i class="fa-solid fa-print"></i></button>
+            </div>
+        `;
         row.appendChild(side);
 
         const area = document.createElement('div');
@@ -513,12 +499,18 @@ function render() {
                 
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
+                
+                // ADJUSTED: Increased multiplier to 10.5 to push labels out much earlier
+                const textLength = Math.max(item.name.length, teamStr.length);
                 const badgeWidth = 28 + (supportNames.length * 24) + 20;
-                const labelOutside = barWidthPx < (badgeWidth + (item.name.length * 7.5));
+                const requiredWidthInside = badgeWidth + (textLength * 10.5) + 30;
+
+                const labelOutside = barWidthPx < requiredWidthInside;
 
                 const el = document.createElement('div');
                 el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
+                
                 const badgesHtml = `<div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}"><div class="badge lead">${leadData.displayInitials}</div>${sortedSupportIds.map(id => `<div class="badge support" style="background:${staffInfo[id]?.color || '#64748b'}">${staffInfo[id]?.displayInitials || '?'}</div>`).join('')}</div>`;
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
                 el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
