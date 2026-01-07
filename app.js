@@ -106,36 +106,50 @@ function loadData() {
         if (data.config) config = data.config;
     }
     
+    // Setup data
     assignColors(); 
     updateInitials(); 
-    
     sortProjects(); 
     initTimelineRange(); 
     initFilters(); 
     render();
-    updateStatusMessage("Flow Loaded - No Changes", false);
+
+    // Reset status: On load, we assume the browser matches the last session
     hasChanges = false;
+    updateStatusMessage("Workspace Ready", false);
 }
 
 
 function markModified() {
     hasChanges = true;
-    updateStatusMessage("Unsaved Changes", true);
+    updateStatusMessage("Changes Pending Export", true);
 }
 
 function persist() {
     localStorage.setItem('gantt_flow', JSON.stringify({ config, staff: staffInfo, projects }));
-    updateStatusMessage(`Flow Saved ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`, false);
-    hasChanges = false;
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    
+    // Even though it's saved to browser, keep warning if not exported to file
+    if (hasChanges) {
+        updateStatusMessage(`Auto-saved to Browser (${time}) - Export Required`, true);
+    } else {
+        updateStatusMessage(`Workspace Ready (${time})`, false);
+    }
 }
 
 function updateStatusMessage(text, isWarning) {
     const el = document.getElementById('save-status');
     if (!el) return;
-    const icon = isWarning ? '<i class="fa-solid fa-circle-exclamation fa-fade"></i>' : '<i class="fa-solid fa-circle-check"></i>';
+    
+    // Change icons to reflect the actual action needed
+    const icon = isWarning 
+        ? '<i class="fa-solid fa-file-export fa-fade"></i>' // Pulse icon for export
+        : '<i class="fa-solid fa-circle-check"></i>';      // Check for synced
+        
     el.innerHTML = `${icon} <span>${text}</span>`;
     el.className = isWarning ? 'unsaved' : 'saved';
 }
+
 
 // --- Sidebar & Filter Logic ---
 
@@ -396,56 +410,32 @@ function handleFileImport(e) {
     reader.onload = (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            
-            // 1. Load raw data
-            projects = data.projects || []; 
-            staffInfo = data.staff || {};
+            projects = data.projects || []; staffInfo = data.staff || {};
             if (data.config) config = data.config;
 
-            // 2. CRITICAL: Run the initialization sequence to generate 
-            // the properties missing from the clean JSON
-            assignColors();     // Injects TBC and sets colors
-            updateInitials();   // Generates displayInitials (The fix for your error)
-            sortProjects();     // Sorts A-Z
-            
-            // 3. Refresh UI components
-            initTimelineRange(); 
-            initFilters(); 
-            render(); 
-            
-            // 4. Save to LocalStorage so a refresh keeps the new data
-            persist();
+            assignColors(); updateInitials(); sortProjects(); 
+            initTimelineRange(); initFilters(); render(); 
+            persist(); 
 
-            updateStatusMessage("Flow Imported Successfully", false);
-        } catch (err) { 
-            console.error(err);
-            alert("Error parsing JSON."); 
-        }
+            // After import, the state is "clean"
+            hasChanges = false;
+            updateStatusMessage("JSON File Loaded", false);
+        } catch (err) { alert("Error parsing JSON."); }
     };
     reader.readAsText(e.target.files[0]);
 }
 
 function exportData() {
-    // 1. Create a deep copy of staff and projects to avoid breaking the live UI
     const staffCopy = JSON.parse(JSON.stringify(staffInfo));
     const projectsCopy = JSON.parse(JSON.stringify(projects));
 
-    // 2. Remove TBC (since it's now hardcoded in the app)
     delete staffCopy['TBC'];
-
-    // 3. Strip calculated/UI-only properties from every staff member
     Object.keys(staffCopy).forEach(id => {
         delete staffCopy[id].color;
         delete staffCopy[id].displayInitials;
     });
 
-    // 4. Construct the clean data object
-    const exportObj = {
-        config,
-        staff: staffCopy,
-        projects: projectsCopy
-    };
-
+    const exportObj = { config, staff: staffCopy, projects: projectsCopy };
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
 
@@ -457,8 +447,10 @@ function exportData() {
     a.download = `roadmap_${timestamp}.json`;
     a.click();
 
+    // RECTIFIED: The file is now the source of truth
     hasChanges = false;
-    updateStatusMessage(`Exported Clean JSON ${new Date().toLocaleTimeString()}`, false);
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    updateStatusMessage(`JSON Exported (${time})`, false);
 }
 
 // --- Render Engine ---
