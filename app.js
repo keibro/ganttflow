@@ -542,12 +542,15 @@ function render() {
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
                 
-                const leadWidth = 44; 
+                // RECTIFIED: Increased Lead Width to 48px to accommodate more prominent lead badge
+                const leadWidth = 48; 
                 const supportWidth = 42;
                 const badgeGap = 6;
                 const totalBadgesArea = leadWidth + (sortedSupportIds.length * (supportWidth + badgeGap));
 
                 const badgesOutside = barWidthPx < (totalBadgesArea + 5);
+                
+                // Buffer increased slightly to account for bolder font in prominent mode
                 const estimatedTextWidth = (item.name.length * 11);
                 const labelOutside = barWidthPx < (totalBadgesArea + estimatedTextWidth + 40);
 

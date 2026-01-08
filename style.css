@@ -73,7 +73,7 @@ body {
 
 .timeline-header div:first-child { background-color: #f1f5f9; position: sticky; left: 0; z-index: 130; border-right: 2px solid var(--grid-border); }
 
-.timeline-row { display: grid; border-bottom: 1px solid var(--grid-border); position: relative; }
+.timeline-row { display: grid; border-bottom: 1px solid var(--grid-border); position: relative; z-index: 1; }
 
 .timeline-row:nth-child(even) { background-color: #ffffff; }
 .timeline-row:nth-child(odd) { background-color: #fcfdfe; }
@@ -90,7 +90,6 @@ body {
 
 /* --- RECTIFIED TASKS & BADGES --- */
 
-/* RECTIFIED: Higher Z-Index for tasks relative to milestone lines */
 .task-item { position: absolute; height: 48px; display: flex; align-items: center; z-index: 40; cursor: pointer; }
 
 .task-bar { 
@@ -115,7 +114,13 @@ body {
 .badge:not(.org) { border-radius: 50%; width: 24px; height: 24px; }
 .badge.org { border-radius: 4px; height: 26px; min-width: 26px; padding: 0 4px; border-width: 2px; }
 
-.badge.lead { height: 32px; min-width: 32px; font-size: 11px; z-index: 5; }
+/* RECTIFIED: BOOSTED LEAD ORG PROMINENCE */
+.badge.lead { 
+    height: 36px; min-width: 36px; font-size: 12px; z-index: 35; 
+    border-width: 2.5px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.1);
+}
+.badge.lead.org { border-radius: 6px; }
 
 .badges-outside { 
     position: absolute; right: calc(100% + 12px) !important; left: auto !important; 
@@ -144,11 +149,8 @@ body {
 
 /* --- RECTIFIED MILESTONES --- */
 
-/* RECTIFIED: Parent container MUST NOT have a z-index. 
-   This allows individual children to "interleave" with lines from other rows. */
 .milestone-lane-item { position: absolute; height: 42px; display: flex; align-items: center; cursor: pointer; }
 
-/* RECTIFIED: DIAMOND AND LABEL GET HIGH Z-INDEX */
 .milestone-diamond { 
     width: 14px; height: 14px; background: var(--milestone-gold); 
     transform: rotate(45deg); border: 2.5px solid #fff; margin-right: 12px; 
@@ -157,7 +159,7 @@ body {
 
 .milestone-lane-label { 
     font-size: 13px; font-weight: 800; color: var(--milestone-gold); 
-    background-color: #fffbeb !important; /* Force solid color */
+    background-color: #fffbeb !important; 
     padding: 4px 10px; border-radius: 6px; 
     border: 1.5px solid rgba(180, 83, 9, 0.4); 
     white-space: nowrap; 
@@ -165,8 +167,6 @@ body {
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-/* RECTIFIED: The vertical line is now set to Z-Index 1. 
-   Anything with z-index > 1 (labels at 35, tasks at 40) will cover it. */
 .date-line { position: absolute; width: 2px; background: var(--milestone-gold); opacity: 0.15; pointer-events: none; z-index: 1; }
 
 /* --- MODALS & FORMS --- */
