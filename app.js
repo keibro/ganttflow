@@ -1,5 +1,5 @@
 /**
- * Gantt Flow Logic
+ * Gantt Flow Logic - Organisation Level Expansion
  */
 
 let staffInfo = {};
@@ -70,12 +70,10 @@ function updateInitials() {
     Object.entries(staffInfo).forEach(([id, data]) => {
         if (id === 'TBC') { data.displayInitials = 'TBC'; return; }
         if (data.isOrg) {
-            // RECTIFIED: Improved abbreviation logic
             const acronym = data.name.match(/[A-Z]/g);
             if (acronym && acronym.length > 1) {
                 data.displayInitials = acronym.join('').substring(0, 4);
             } else {
-                // If single word or no capitals, take first three letters
                 data.displayInitials = data.name.substring(0, 3);
             }
         } else {
@@ -99,7 +97,7 @@ function sortProjects() {
     projects.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, {sensitivity: 'base'}));
 }
 
-// --- Persistence & Status ---
+// --- Persistence ---
 
 function loadData() {
     const saved = localStorage.getItem('gantt_flow');
@@ -154,13 +152,11 @@ function initFilters() {
     `;
 
     const sorted = getStaffSortedBySurname();
-    
     if (sorted.some(s => s[1].isOrg)) {
         const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Organisations';
         container.appendChild(h);
         sorted.filter(s => s[1].isOrg).forEach(([key, info]) => appendFilterBtn(container, key, info));
     }
-
     if (sorted.some(s => !s[1].isOrg)) {
         const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Staff Members';
         container.appendChild(h);
@@ -542,20 +538,26 @@ function render() {
 
                 const teamNames = [leadData.name, ...sortedSupportIds.map(id => staffInfo[id]?.name || 'Unknown')];
                 const teamStr = teamNames.join(', ');
+
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
-                const textLength = Math.max(item.name.length, teamStr.length);
-                const badgeWidth = 28 + (sortedSupportIds.length * 24) + 20;
-                const requiredWidthInside = badgeWidth + (textLength * 10.5) + 30;
-                const labelOutside = barWidthPx < requiredWidthInside;
+                
+                const leadWidth = 44; 
+                const supportWidth = 42;
+                const badgeGap = 6;
+                const totalBadgesArea = leadWidth + (sortedSupportIds.length * (supportWidth + badgeGap));
+
+                const badgesOutside = barWidthPx < (totalBadgesArea + 5);
+                const estimatedTextWidth = (item.name.length * 11);
+                const labelOutside = barWidthPx < (totalBadgesArea + estimatedTextWidth + 40);
 
                 const el = document.createElement('div');
                 el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
                 
                 const badgesHtml = `
-                    <div class="badge-group ${barWidthPx < badgeWidth-10 ? 'badges-outside' : ''}">
-                        <div class="badge lead ${leadData.isOrg?'org':''}">${leadData.displayInitials}</div>
+                    <div class="badge-group ${badgesOutside ? 'badges-outside' : ''}">
+                        <div class="badge lead ${leadData.isOrg?'org':''}" style="background:${leadData.color}">${leadData.displayInitials}</div>
                         ${sortedSupportIds.map(id => {
                             const sInfo = staffInfo[id];
                             return `<div class="badge support ${sInfo?.isOrg?'org':''}" style="background:${sInfo?.color || '#64748b'}">${sInfo?.displayInitials || '?'}</div>`;
@@ -563,7 +565,7 @@ function render() {
                     </div>`;
 
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
-                el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
+                el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background-color:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
                 area.appendChild(el);
             } else {
                 const mEl = document.createElement('div');
