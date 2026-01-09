@@ -513,7 +513,8 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const nowLocal = new Date();
     const safeName = (config.planName || 'roadmap').toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const timestamp = `${nowLocal.getFullYear()}_${monthNames[nowLocal.getMonth()]}_${String(nowLocal.getDate()).padStart(2, '0')}_${String(nowLocal.getHours()).padStart(2, '0')}${String(nowLocal.getMinutes()).padStart(2, '0')}`;
+    const timestamp = `${nowLocal.getFullYear()}_${String(nowLocal.getMonth() + 1).padStart(2, '0')}_${String(nowLocal.getDate()).padStart(2, '0')}_${String(nowLocal.getHours()).padStart(2, '0')}${String(nowLocal.getMinutes()).padStart(2, '0')}`;
+    
     const a = document.createElement("a");
     a.href = url;
     a.download = `${safeName}_${timestamp}.json`;
