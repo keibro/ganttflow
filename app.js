@@ -4,7 +4,7 @@
 
 let staffInfo = {};
 let projects = [];
-let config = { startYear: 2026, startMonth: 1, endYear: 2027, endMonth: 2 }; 
+let config = { planName: 'Gantt Chart', startYear: 2026, startMonth: 1, endYear: 2027, endMonth: 2 }; 
 let timelineMonths = []; 
 let currentFilter = 'ALL';
 let editingContext = null;
@@ -105,7 +105,7 @@ function loadData() {
         const data = JSON.parse(saved);
         projects = data.projects || []; 
         staffInfo = data.staff || {};
-        if (data.config) config = data.config;
+        if (data.config) config = { ...config, ...data.config };
     }
     assignColors(); updateInitials(); sortProjects(); 
     initTimelineRange(); initFilters(); render();
@@ -177,8 +177,9 @@ function configureTimeline() {
     const monthOptions = monthNames.map((m, i) => `<option value="${i+1}">${m}</option>`).join('');
     const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
     const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
-    openModal("Timeline Settings", "Reconfigure chart view period", `
+    openModal("Workspace Settings", "Reconfigure plan details and view period", `
         <div class="form-grid">
+            <div class="form-group full-width"><label>Plan Title (for export filename)</label><input type="text" id="conf_planName" value="${config.planName || ''}"></div>
             <div class="form-group"><label>Start Month</label><select id="conf_startMonth">${monthOptions}</select></div>
             <div class="form-group"><label>Start Year</label><select id="conf_startYear">${yearOptions}</select></div>
             <div class="form-group"><label>End Month</label><select id="conf_endMonth">${monthOptions}</select></div>
@@ -403,6 +404,8 @@ function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone'
 function saveChanges() {
     const ctx = editingContext;
     if (ctx.type === 'timeline-config') {
+        // RECTIFIED: Saving planName
+        config.planName = document.getElementById('conf_planName').value || 'Gantt Chart';
         config.startMonth = parseInt(document.getElementById('conf_startMonth').value);
         config.startYear = parseInt(document.getElementById('conf_startYear').value);
         config.endMonth = parseInt(document.getElementById('conf_endMonth').value);
@@ -441,7 +444,7 @@ function handleFileImport(e) {
         try {
             const data = JSON.parse(ev.target.result);
             projects = data.projects || []; staffInfo = data.staff || {};
-            if (data.config) config = data.config;
+            if (data.config) config = { ...config, ...data.config };
             assignColors(); updateInitials(); sortProjects(); 
             initTimelineRange(); initFilters(); render(); 
             persist(); 
@@ -464,11 +467,15 @@ function exportData() {
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const now = new Date();
+    
+    // RECTIFIED: Filename construction using planName
+    const safeName = (config.planName || 'roadmap').toLowerCase().replace(/[^a-z0-9]/g, '_');
     const timestamp = `${now.getFullYear()}_${monthNames[now.getMonth()]}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `roadmap_${timestamp}.json`;
+    a.download = `${safeName}_${timestamp}.json`;
     a.click();
+    
     hasChanges = false;
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     updateStatusMessage(`JSON Exported (${time})`, false);
@@ -542,15 +549,12 @@ function render() {
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
                 
-                // RECTIFIED: Increased Lead Width to 48px to accommodate more prominent lead badge
                 const leadWidth = 48; 
                 const supportWidth = 42;
                 const badgeGap = 6;
                 const totalBadgesArea = leadWidth + (sortedSupportIds.length * (supportWidth + badgeGap));
 
                 const badgesOutside = barWidthPx < (totalBadgesArea + 5);
-                
-                // Buffer increased slightly to account for bolder font in prominent mode
                 const estimatedTextWidth = (item.name.length * 11);
                 const labelOutside = barWidthPx < (totalBadgesArea + estimatedTextWidth + 40);
 
