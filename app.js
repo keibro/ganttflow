@@ -48,19 +48,24 @@ function getMonthPreview(val, year) {
     return `${p} ${mName} ${year}`;
 }
 
-// --- Helpers ---
+// --- Sorting Helpers ---
 
-function getStaffSortedBySurname() {
+function getSortedStaff() {
     return Object.entries(staffInfo)
-        .filter(([id]) => id !== 'TBC')
+        .filter(([id, data]) => id !== 'TBC' && !data.isOrg)
         .sort((a, b) => {
-            if (a[1].isOrg !== b[1].isOrg) return a[1].isOrg ? -1 : 1;
             const nameA = a[1].name.trim().split(/\s+/);
             const nameB = b[1].name.trim().split(/\s+/);
             const surnameA = nameA[nameA.length - 1].toLowerCase();
             const surnameB = nameB[nameB.length - 1].toLowerCase();
             return surnameA.localeCompare(surnameB);
         });
+}
+
+function getSortedOrgs() {
+    return Object.entries(staffInfo)
+        .filter(([id, data]) => id !== 'TBC' && data.isOrg)
+        .sort((a, b) => a[1].name.trim().toLowerCase().localeCompare(b[1].name.trim().toLowerCase()));
 }
 
 function initTimelineRange() {
@@ -95,7 +100,8 @@ function updateInitials() {
 
 function assignColors() {
     staffInfo['TBC'] = { name: 'Unassigned', role: 'Pending', displayInitials: 'TBC', color: '#64748b', isOrg: false };
-    getStaffSortedBySurname().forEach(([id], index) => { 
+    const allSorted = [...getSortedOrgs(), ...getSortedStaff()];
+    allSorted.forEach(([id], index) => { 
         if (!staffInfo[id].color) {
             staffInfo[id].color = PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length]; 
         }
@@ -160,16 +166,23 @@ function initFilters() {
         <button class="filter-item" id="f-TBC" onclick="setFilter('TBC')"><i class="fa-solid fa-user-slash"></i> Unassigned</button>
     `;
 
-    const sorted = getStaffSortedBySurname();
-    if (sorted.some(s => s[1].isOrg)) {
+    const orgs = getSortedOrgs();
+    if (orgs.length > 0) {
         const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Organisations';
         container.appendChild(h);
-        sorted.filter(s => s[1].isOrg).forEach(([key, info]) => appendFilterBtn(container, key, info));
+        orgs.forEach(([key, info]) => appendFilterBtn(container, key, info));
     }
-    if (sorted.some(s => !s[1].isOrg)) {
+
+    const staff = getSortedStaff();
+    if (staff.length > 0) {
+        // ADDED SEPARATOR
+        const sep = document.createElement('div');
+        sep.className = 'filter-separator';
+        container.appendChild(sep);
+
         const h = document.createElement('span'); h.className = 'filter-section-header'; h.textContent = 'Staff Members';
         container.appendChild(h);
-        sorted.filter(s => !s[1].isOrg).forEach(([key, info]) => appendFilterBtn(container, key, info));
+        staff.forEach(([key, info]) => appendFilterBtn(container, key, info));
     }
 }
 
@@ -300,11 +313,25 @@ function addGoal(pIdx) {
 function removeGoal(pIdx, gIdx) { projects[pIdx].goals.splice(gIdx, 1); markModified(); persist(); editProject(pIdx); }
 
 function manageRegistry() {
-    const ss = getStaffSortedBySurname();
+    const orgs = getSortedOrgs();
+    const staff = getSortedStaff();
+    
     let html = `<div class="staff-manager-container"><div class="staff-list-header"><div></div><div>Registry Name / Description</div><div style="text-align:right">Options</div></div>`;
-    ss.forEach(([id, info]) => {
-        html += `<div class="staff-row"><div class="staff-avatar ${info.isOrg?'':'is-staff'}" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editAssignee('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteAssignee('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
-    });
+    
+    if (orgs.length > 0) {
+        html += `<div class="registry-group-header">Organisations</div>`;
+        orgs.forEach(([id, info]) => {
+            html += `<div class="staff-row"><div class="staff-avatar" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editAssignee('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteAssignee('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
+        });
+    }
+
+    if (staff.length > 0) {
+        html += `<div class="registry-group-header">Staff Members</div>`;
+        staff.forEach(([id, info]) => {
+            html += `<div class="staff-row"><div class="staff-avatar is-staff" style="background:${info.color}">${info.displayInitials}</div><div class="staff-meta"><strong>${info.name}</strong><span>${info.role}</span></div><div class="staff-actions"><button class="btn-icon" onclick="editAssignee('${id}')"><i class="fa-solid fa-user-pen"></i></button><button class="btn-icon delete" onclick="deleteAssignee('${id}')"><i class="fa-solid fa-user-xmark"></i></button></div></div>`;
+        });
+    }
+    
     openModal("Registry Directory", "Staff and Organisations", html + `</div>`);
     const footer = document.querySelector('.modal-footer');
     footer.innerHTML = `
@@ -345,12 +372,21 @@ function deleteAssignee(id) {
 function editTask(pIdx, tIdx) {
     editingContext = { type: 'task', pIdx, tIdx };
     const t = projects[pIdx].tasks[tIdx];
-    const sorted = getStaffSortedBySurname();
-    const collabCards = sorted.map(([k, v]) => {
+    
+    const orgs = getSortedOrgs();
+    const staff = getSortedStaff();
+
+    const buildCard = ([k, v]) => {
         const isChecked = t.support?.some(s => s.staff === k);
         return `<div class="collaborator-item ${v.isOrg?'is-org':''} ${isChecked ? 'selected' : ''}" onclick="toggleCollabCard(this, '${k}')"><input type="checkbox" name="collab" value="${k}" ${isChecked ? 'checked' : ''}><div class="collab-avatar ${v.isOrg?'':'is-staff'}" style="background:${v.color}">${v.displayInitials}</div><div class="collab-info"><strong>${v.name}</strong><span>${v.role}</span></div></div>`;
-    }).join('');
-    const leadOptions = [['TBC', staffInfo['TBC']], ...sorted].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
+    };
+
+    const orgCards = orgs.length > 0 ? `<div class="picker-section-label">Organisations</div>` + orgs.map(buildCard).join('') : '';
+    const staffCards = staff.length > 0 ? `<div class="picker-section-label">Staff Members</div>` + staff.map(buildCard).join('') : '';
+
+    const allSortedForLead = [...orgs, ...staff];
+    const leadOptions = [['TBC', staffInfo['TBC']], ...allSortedForLead].map(([k,v]) => `<option value="${k}" ${k===t.lead?'selected':''}>${v.name}</option>`).join('');
+    
     const yearOptions = [2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => `<option value="${y}">${y}</option>`).join('');
     openModal("Edit Task", "Configure assignments", `
         <div class="form-grid">
@@ -366,7 +402,7 @@ function editTask(pIdx, tIdx) {
             </div>
             <div class="form-group"><label>End Year</label><select id="e_end_y">${yearOptions}</select></div>
             <div class="form-group full-width"><label>Lead (Staff or Org)</label><select id="e_lead">${leadOptions}</select></div>
-            <div class="form-group full-width"><label>Collaborators</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search registry..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${collabCards}</div></div>
+            <div class="form-group full-width"><label>Collaborators</label><div id="e_collab_preview" class="collab-pills-container"></div><div class="team-picker-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Search registry..." oninput="filterCollabs(this.value)"></div><div class="collaborator-box">${orgCards}${staffCards}</div></div>
         </div>`, () => { projects[pIdx].tasks.splice(tIdx,1); markModified(); closeModal(); render(); persist(); });
     document.getElementById('e_start_y').value = t.startYear || config.startYear;
     document.getElementById('e_end_y').value = t.endYear || config.startYear;
@@ -414,7 +450,6 @@ function addMilestone(pIdx) { projects[pIdx].milestones.push({ name: 'Milestone'
 function saveChanges() {
     const ctx = editingContext;
     if (ctx.type === 'timeline-config') {
-        // RECTIFIED: Saving planName
         config.planName = document.getElementById('conf_planName').value || 'Gantt Chart';
         config.startMonth = parseInt(document.getElementById('conf_startMonth').value);
         config.startYear = parseInt(document.getElementById('conf_startYear').value);
@@ -454,10 +489,7 @@ function handleFileImport(e) {
         try {
             const data = JSON.parse(ev.target.result);
             projects = data.projects || []; staffInfo = data.staff || {};
-            // RECTIFIED: Merging imported config with existing logic
             if (data.config) config = { ...config, ...data.config };
-            
-            // RECTIFIED: Full re-initialization after import
             assignColors(); updateInitials(); sortProjects(); 
             initTimelineRange(); initFilters(); render(); 
             persist(); 
@@ -480,15 +512,12 @@ function exportData() {
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const nowLocal = new Date();
-    
-    // RECTIFIED: Filename construction using planName
     const safeName = (config.planName || 'roadmap').toLowerCase().replace(/[^a-z0-9]/g, '_');
     const timestamp = `${nowLocal.getFullYear()}_${monthNames[nowLocal.getMonth()]}_${String(nowLocal.getDate()).padStart(2, '0')}_${String(nowLocal.getHours()).padStart(2, '0')}${String(nowLocal.getMinutes()).padStart(2, '0')}`;
     const a = document.createElement("a");
     a.href = url;
     a.download = `${safeName}_${timestamp}.json`;
     a.click();
-    
     hasChanges = false;
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     updateStatusMessage(`JSON Exported (${time})`, false);
@@ -553,20 +582,19 @@ function render() {
                 const sortedSupportIds = supportIds.sort((a, b) => {
                     const infoA = staffInfo[a]; const infoB = staffInfo[b];
                     if (!infoA || !infoB) return 0;
+                    if (infoA.isOrg && infoB.isOrg) return infoA.name.toLowerCase().localeCompare(infoB.name.toLowerCase());
+                    if (infoA.isOrg !== infoB.isOrg) return infoA.isOrg ? -1 : 1;
                     return infoA.name.trim().split(/\s+/).pop().toLowerCase().localeCompare(infoB.name.trim().split(/\s+/).pop().toLowerCase());
                 });
 
                 const teamNames = [leadData.name, ...sortedSupportIds.map(id => staffInfo[id]?.name || 'Unknown')];
                 const teamStr = teamNames.join(', ');
-
                 const barWidthPercent = ((item.viewEnd - item.viewStart) / totalCols) * 100;
                 const barWidthPx = (barWidthPercent / 100) * gridWidth;
-                
                 const leadWidth = 48; 
                 const supportWidth = 42;
                 const badgeGap = 6;
                 const totalBadgesArea = leadWidth + (sortedSupportIds.length * (supportWidth + badgeGap));
-
                 const badgesOutside = barWidthPx < (totalBadgesArea + 5);
                 const estimatedTextWidth = (item.name.length * 11);
                 const labelOutside = barWidthPx < (totalBadgesArea + estimatedTextWidth + 40);
@@ -574,16 +602,7 @@ function render() {
                 const el = document.createElement('div');
                 el.className = 'task-item'; el.style.left = `${((item.viewStart-1)/totalCols)*100}%`; el.style.width = `${barWidthPercent}%`; el.style.top = `${vTop}px`;
                 el.onclick = () => editTask(pIdx, item.oIdx);
-                
-                const badgesHtml = `
-                    <div class="badge-group ${badgesOutside ? 'badges-outside' : ''}">
-                        <div class="badge lead ${leadData.isOrg?'org':''}" style="background:${leadData.color}">${leadData.displayInitials}</div>
-                        ${sortedSupportIds.map(id => {
-                            const sInfo = staffInfo[id];
-                            return `<div class="badge support ${sInfo?.isOrg?'org':''}" style="background:${sInfo?.color || '#64748b'}">${sInfo?.displayInitials || '?'}</div>`;
-                        }).join('')}
-                    </div>`;
-
+                const badgesHtml = `<div class="badge-group ${badgesOutside ? 'badges-outside' : ''}"><div class="badge lead ${leadData.isOrg?'org':''}" style="background:${leadData.color}">${leadData.displayInitials}</div>${sortedSupportIds.map(id => { const sInfo = staffInfo[id]; return `<div class="badge support ${sInfo?.isOrg?'org':''}" style="background:${sInfo?.color || '#64748b'}">${sInfo?.displayInitials || '?'}</div>`; }).join('')}</div>`;
                 const labelHtml = `<div class="task-label ${labelOutside ? 'label-outside' : 'label-inside'}"><div class="task-name-text">${item.name}</div><div class="task-team-text">${teamStr}</div></div>`;
                 el.innerHTML = `<div class="task-bar ${item.lead === 'TBC' ? 'tbc-warning' : ''}" style="background-color:${leadData.color}">${badgesHtml}${labelHtml}</div>`;
                 area.appendChild(el);
