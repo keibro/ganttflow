@@ -4,7 +4,16 @@
 
 let staffInfo = {};
 let projects = [];
-let config = { planName: 'Gantt Chart', startYear: 2026, startMonth: 1, endYear: 2027, endMonth: 2 }; 
+
+const now = new Date();
+let config = { 
+    planName: 'Gantt Chart', 
+    startYear: now.getFullYear(), 
+    startMonth: now.getMonth() + 1, 
+    endYear: now.getFullYear(), 
+    endMonth: 12 
+}; 
+
 let timelineMonths = []; 
 let currentFilter = 'ALL';
 let editingContext = null;
@@ -174,7 +183,8 @@ function appendFilterBtn(container, key, info) {
 
 function configureTimeline() {
     editingContext = { type: 'timeline-config' };
-    const monthOptions = monthNames.map((m, i) => `<option value="${i+1}">${m}</option>`).join('');
+    const monthNamesLocal = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthOptions = monthNamesLocal.map((m, i) => `<option value="${i+1}">${m}</option>`).join('');
     const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
     const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
     openModal("Workspace Settings", "Reconfigure plan details and view period", `
@@ -444,7 +454,10 @@ function handleFileImport(e) {
         try {
             const data = JSON.parse(ev.target.result);
             projects = data.projects || []; staffInfo = data.staff || {};
+            // RECTIFIED: Merging imported config with existing logic
             if (data.config) config = { ...config, ...data.config };
+            
+            // RECTIFIED: Full re-initialization after import
             assignColors(); updateInitials(); sortProjects(); 
             initTimelineRange(); initFilters(); render(); 
             persist(); 
@@ -466,11 +479,11 @@ function exportData() {
     const exportObj = { config, staff: staffCopy, projects: projectsCopy };
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const now = new Date();
+    const nowLocal = new Date();
     
     // RECTIFIED: Filename construction using planName
     const safeName = (config.planName || 'roadmap').toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const timestamp = `${now.getFullYear()}_${monthNames[now.getMonth()]}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const timestamp = `${nowLocal.getFullYear()}_${monthNames[nowLocal.getMonth()]}_${String(nowLocal.getDate()).padStart(2, '0')}_${String(nowLocal.getHours()).padStart(2, '0')}${String(nowLocal.getMinutes()).padStart(2, '0')}`;
     const a = document.createElement("a");
     a.href = url;
     a.download = `${safeName}_${timestamp}.json`;
